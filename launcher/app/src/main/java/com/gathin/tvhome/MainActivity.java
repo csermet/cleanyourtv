@@ -128,6 +128,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean reducedMotion;
     /** Festive skin from the theme (see Festival); applied while it is active today. */
     private Festival festival = Festival.NONE;
+    /** The wallpaper file on screen (null for the plain colour); see WallpaperRotation. */
+    private java.io.File wallpaperShown;
     private boolean festive;
     private DiyaDrawable diya;
     private BellDrawable bell;
@@ -226,6 +228,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         root = findViewById(R.id.root);
         root.setBackgroundColor(cfg.backgroundColor);
+        wallpaperShown = cfg.wallpaper;
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
         sky = findViewById(R.id.sky);
         sky.setIntensity(cfg.skyIntensity);
@@ -493,6 +496,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         super.onResume();
         // A festival that started or ended while Home was in the background: rebuild with or without it.
         if (festive != festival.active(LocalDate.now())) {
+            recreate();
+            return;
+        }
+        // A rotating wallpaper whose day has passed while Home was in the background: show the next one.
+        // Only when a picture is showing, so a theme with the wallpaper switched off never loops here.
+        if (wallpaperShown != null && !wallpaperShown.equals(WallpaperRotation.pick(Config.dir(this),
+                Config.WALLPAPER_NAME, LocalDate.now().toEpochDay()))) {
             recreate();
             return;
         }
