@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 
@@ -56,6 +57,10 @@ public class HomeKeyService extends AccessibilityService {
 
     @Override
     protected boolean onKeyEvent(KeyEvent event) {
+        // One line per press, to find a vendor button's code: logcat -s tvhome-key
+        if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+            Log.i("tvhome-key", "keyCode=" + event.getKeyCode() + " scanCode=" + event.getScanCode());
+        }
         // The stock launcher handled the remote's Settings button; with it disabled the button does nothing.
         if (isSettingsKey(event)) {
             if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
@@ -65,6 +70,8 @@ public class HomeKeyService extends AccessibilityService {
             }
             return true;
         }
+        // A button mapped to "none" in app_keys is swallowed: it does nothing at all.
+        if ("none".equals(appKeys.get(event.getKeyCode()))) return true;
         // App buttons (Netflix, YouTube, ...) the stock launcher handled; also lets a button open another app.
         Intent app = appKeyIntent(event.getKeyCode());
         if (app != null) {

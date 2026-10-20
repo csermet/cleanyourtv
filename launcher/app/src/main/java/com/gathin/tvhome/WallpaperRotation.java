@@ -6,8 +6,10 @@ import java.util.Locale;
 
 /**
  * Which wallpaper Home shows today. A theme can push several pictures into a {@code wallpapers/}
- * folder next to config.json; Home then shows one a day, in file-name order, and moves to the next on
- * the first Home after midnight. Without that folder the single {@code wallpaper.jpg} is used, as before.
+ * folder next to config.json; Home then shuffles them like a playlist: every picture once per cycle of
+ * N days, a new random order each cycle, and never the same picture two days running. The owner can
+ * also pick one for today in Launcher settings (or shuffle now); the daily shuffle resumes the next
+ * day. Without that folder the single {@code wallpaper.jpg} is used, as before.
  * Plain Java (no Android types) so it can be unit tested.
  */
 final class WallpaperRotation {
@@ -15,16 +17,81 @@ final class WallpaperRotation {
 
     private WallpaperRotation() {}
 
-    /** Today's picture for {@code epochDay} (LocalDate.toEpochDay), or null when there is none. */
-    static File pick(File themeDir, String singleName, long epochDay) {
-        if (themeDir == null) return null;
+    /** The rotating pictures, sorted by file name; empty when there are none. */
+    static File[] list(File themeDir) {
+        if (themeDir == null) return new File[0];
         File[] list = new File(themeDir, DIR_NAME).listFiles(f -> f.isFile() && f.length() > 0
                 && f.getName().toLowerCase(Locale.ROOT).endsWith(".jpg"));
-        if (list != null && list.length > 0) {
-            Arrays.sort(list, (a, b) -> a.getName().compareTo(b.getName()));
-            return list[(int) Math.floorMod(epochDay, (long) list.length)];
+        if (list == null) return new File[0];
+        Arrays.sort(list, (a, b) -> a.getName().compareTo(b.getName()));
+        return list;
+    }
+
+    /** Today's picture for {@code epochDay} (LocalDate.toEpochDay), or null when there is none. */
+    static File pick(File themeDir, String singleName, long epochDay) {
+        return pick(themeDir, singleName, epochDay, null);
+    }
+
+    /** As above; {@code override} is a file name in wallpapers/ the owner picked for today, or null. */
+    static File pick(File themeDir, String singleName, long epochDay, String override) {
+        if (themeDir == null) return null;
+        File[] list = list(themeDir);
+        if (list.length > 0) {
+            if (override != null) {
+                for (File f : list) if (f.getName().equals(override)) return f;
+            }
+            return list[index(epochDay, list.length)];
         }
         File single = new File(themeDir, singleName);
         return single.isFile() && single.length() > 0 ? single : null;
+    }
+
+    /** Position in the shuffled playlist for a day: a permutation per cycle of n days. */
+    static int index(long epochDay, int n) {
+        if (n <= 1) return 0;
+        // Two pictures can only alternate; the swap below would move the last one too.
+        if (n == 2) return (int) Math.floorMod(epochDay, 2L);
+        long cycle = Math.floorDiv(epochDay, (long) n);
+        int pos = (int) Math.floorMod(epochDay, (long) n);
+        return order(cycle, n)[pos];
+    }
+
+    /** The cycle's order; its first picture is never the previous cycle's last. */
+    static int[] order(long cycle, int n) {
+        int[] p = permutation(cycle, n);
+        if (n > 1 && p[0] == permutation(cycle - 1, n)[n - 1]) {
+            int t = p[0]; p[0] = p[1]; p[1] = t;
+        }
+        return p;
+    }
+
+    private static int[] permutation(long cycle, int n) {
+        int[] p = new int[n];
+        for (int i = 0; i < n; i++) p[i] = i;
+        long s = mix(cycle * 0x9E3779B97F4A7C15L + n);
+        for (int i = n - 1; i > 0; i--) {
+            s = mix(s);
+            int j = (int) Math.floorMod(s, (long) (i + 1));
+            int t = p[i]; p[i] = p[j]; p[j] = t;
+        }
+        return p;
+    }
+
+    /** SplitMix64 finaliser: a cheap, well-spread hash of a long. */
+    private static long mix(long z) {
+        z += 0x9E3779B97F4A7C15L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return z ^ (z >>> 31);
+    }
+
+    /** "misaka-kuroko.jpg" -> "Misaka kuroko": a readable label for the picker. */
+    static String label(File f) {
+        String name = f.getName();
+        int dot = name.lastIndexOf('.');
+        if (dot > 0) name = name.substring(0, dot);
+        name = name.replaceFirst("^[0-9]+[-_ ]", "").replace('-', ' ').replace('_', ' ').trim();
+        if (name.isEmpty()) return f.getName();
+        return name.substring(0, 1).toUpperCase(Locale.ROOT) + name.substring(1);
     }
 }

@@ -64,4 +64,10 @@
     <string name="card_state_new">New</string>
     <string name="card_state_new_key">New key</string>
     <string name="card_state_new_label">New name</string>
+    <string name="wallpaper">Wallpaper</string>
+    <string name="wallpaper_state">Wallpaper: %1$s (%2$s)</string>
+    <string name="wallpaper_today">picked for today</string>
+    <string name="wallpaper_daily">daily shuffle</string>
+    <string name="wallpaper_shuffle_now">Shuffle now</string>
+    <string name="wallpaper_hint">Pick a picture for today, or shuffle now. The daily shuffle carries on tomorrow.</string>
 </resources>

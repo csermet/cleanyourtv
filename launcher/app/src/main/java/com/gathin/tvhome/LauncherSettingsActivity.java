@@ -7,9 +7,14 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import java.io.File;
+import java.time.LocalDate;
+import java.util.Random;
 
 /** Remote-friendly settings owned by the launcher; system settings stay one row away. */
 public final class LauncherSettingsActivity extends Activity {
@@ -18,6 +23,7 @@ public final class LauncherSettingsActivity extends Activity {
     private TextView animationsChoice;
     private TextView advancedChoice;
     private TextView followThemeChoice;
+    private TextView wallpaperChoice;
     private int columns;
     private boolean animations;
     private boolean advancedEffects;
@@ -90,8 +96,40 @@ public final class LauncherSettingsActivity extends Activity {
         });
         findViewById(R.id.tvSettingsChoice).setOnClickListener(v ->
                 open(new Intent(Settings.ACTION_SETTINGS)));
+        wallpaperChoice = findViewById(R.id.wallpaperChoice);
+        if (WallpaperRotation.list(Config.dir(this)).length < 2) {
+            wallpaperChoice.setVisibility(View.GONE);
+            findViewById(R.id.wallpaperHint).setVisibility(View.GONE);
+        } else {
+            wallpaperChoice.setOnClickListener(v -> pickWallpaper());
+        }
         refresh();
         columnChoices[Math.max(0, Math.min(columns - 4, 3))].requestFocus();
+    }
+
+    /** The picture list: "Shuffle now" first, then every wallpaper; the choice holds for today. */
+    private void pickWallpaper() {
+        File[] list = WallpaperRotation.list(Config.dir(this));
+        if (list.length < 2) return;
+        String[] labels = new String[list.length + 1];
+        labels[0] = getString(R.string.wallpaper_shuffle_now);
+        for (int i = 0; i < list.length; i++) labels[i + 1] = WallpaperRotation.label(list[i]);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.wallpaper)
+                .setItems(labels, (dialog, which) -> {
+                    File chosen;
+                    if (which == 0) {
+                        File now = Config.currentWallpaper(this);
+                        do { chosen = list[new Random().nextInt(list.length)]; } while (chosen.equals(now));
+                    } else {
+                        chosen = list[which - 1];
+                    }
+                    choices.edit().putString(Config.WALLPAPER_PICK, chosen.getName())
+                            .putLong(Config.WALLPAPER_PICK_DAY, LocalDate.now().toEpochDay()).apply();
+                    setResult(RESULT_OK);
+                    refresh();
+                })
+                .show();
     }
 
     private void setAdvanced(boolean enabled) {
@@ -112,6 +150,14 @@ public final class LauncherSettingsActivity extends Activity {
         advancedChoice.setEnabled(animations);
         advancedChoice.setAlpha(animations ? 1f : 0.5f);
         followThemeChoice.setSelected(!hasOnTvChoices());
+        if (wallpaperChoice != null && wallpaperChoice.getVisibility() == View.VISIBLE) {
+            File now = Config.currentWallpaper(this);
+            boolean picked = choices.getLong(Config.WALLPAPER_PICK_DAY, Long.MIN_VALUE) == LocalDate.now().toEpochDay()
+                    && now != null && now.getName().equals(choices.getString(Config.WALLPAPER_PICK, null));
+            wallpaperChoice.setText(getString(R.string.wallpaper_state,
+                    now == null ? "-" : WallpaperRotation.label(now),
+                    getString(picked ? R.string.wallpaper_today : R.string.wallpaper_daily)));
+        }
     }
 
     private boolean hasOnTvChoices() {

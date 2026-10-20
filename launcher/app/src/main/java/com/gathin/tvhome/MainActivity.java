@@ -238,6 +238,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The glow is one bitmap, so its alpha can be applied while drawing it. Otherwise every frame of
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
+        if (cfg.textColor != 0) tintHeader(cfg.textColor);
         heroName = findViewById(R.id.heroName);
         greeting = findViewById(R.id.greeting);
         greetingColor = greeting.getCurrentTextColor();
@@ -434,6 +435,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * costs a screen-sized bitmap (about 4 MB at 1080p), which is the price of a wallpaper on a 1 GB TV.
      * A picture over 4K is refused rather than decoded (#166); the plain colour stays.
      */
+    /** A theme's text_color on the header texts, keeping each one's own transparency. */
+    private void tintHeader(int color) {
+        int[] ids = {R.id.heroName, R.id.greeting, R.id.clock, R.id.ampm, R.id.date, R.id.shamsiDate};
+        for (int id : ids) {
+            View v = findViewById(id);
+            if (!(v instanceof TextView)) continue;
+            TextView tv = (TextView) v;
+            int alpha = tv.getCurrentTextColor() >>> 24;
+            tv.setTextColor((alpha << 24) | (color & 0x00FFFFFF));
+        }
+    }
+
     /** Android's low-RAM flag, or under 2 GB of memory: those sets keep the half-size RGB_565 wallpaper. */
     private boolean isLowRam() {
         android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
@@ -513,8 +526,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         // A rotating wallpaper whose day has passed while Home was in the background: show the next one.
         // Only when a picture is showing, so a theme with the wallpaper switched off never loops here.
-        if (wallpaperShown != null && !wallpaperShown.equals(WallpaperRotation.pick(Config.dir(this),
-                Config.WALLPAPER_NAME, LocalDate.now().toEpochDay()))) {
+        if (wallpaperShown != null && !wallpaperShown.equals(Config.currentWallpaper(this))) {
             recreate();
             return;
         }

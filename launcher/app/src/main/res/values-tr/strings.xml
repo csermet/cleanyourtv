@@ -58,4 +58,10 @@
     <string name="on">Açık</string>
     <string name="off">Kapalı</string>
     <string name="enable">Etkinleştir</string>
+    <string name="wallpaper">Duvar kağıdı</string>
+    <string name="wallpaper_state">Duvar kağıdı: %1$s (%2$s)</string>
+    <string name="wallpaper_today">bugün için seçildi</string>
+    <string name="wallpaper_daily">günlük karışık</string>
+    <string name="wallpaper_shuffle_now">Şimdi karıştır</string>
+    <string name="wallpaper_hint">Bugün için bir resim seç ya da şimdi karıştır. Günlük karışık sıra yarın devam eder.</string>
 </resources>

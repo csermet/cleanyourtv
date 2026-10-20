@@ -34,6 +34,9 @@ final class Config {
     private static final String TAG = "TvHome.Config";
     static final String FILE_NAME = "config.json";
     static final String WALLPAPER_NAME = "wallpaper.jpg";
+    /** Launcher settings: the wallpapers/ file the owner picked, and the day (LocalDate.toEpochDay) it is for. */
+    static final String WALLPAPER_PICK = "wallpaper_pick";
+    static final String WALLPAPER_PICK_DAY = "wallpaper_pick_day";
     static final String SETTINGS_NAME = "launcher_settings";
     private static final String THEME_REVISION_NAME = "theme_revision";
     private static final String THEME_SIGNATURE_KEY = "theme_signature";
@@ -69,6 +72,8 @@ final class Config {
     final Map<Integer, String> appKeys;
     /** Full-screen picture behind the launcher, or null for the plain colour. */
     final File wallpaper;
+    /** Header text colour (clock, greeting, date, focused app name) from a theme's text_color, or 0 for the built-in white. */
+    final int textColor;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -80,7 +85,7 @@ final class Config {
                    boolean shamsiDate, boolean moduleCards, boolean reducedMotion, String vpnApp,
                    boolean showHomeSettingsShortcut, int backgroundColor, int skyIntensity,
                    int[] settingsKeycodes, boolean settingsKeyPanel, Map<Integer, String> appKeys,
-                   File wallpaper, boolean overlayApplied, Festival festival) {
+                   File wallpaper, boolean overlayApplied, Festival festival, int textColor) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -106,6 +111,7 @@ final class Config {
         this.wallpaper = wallpaper;
         this.overlayApplied = overlayApplied;
         this.festival = festival;
+        this.textColor = textColor;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -176,7 +182,7 @@ final class Config {
         animations = choices.getBoolean("animations", animations);
         advancedEffects = choices.getBoolean("advanced_effects", advancedEffects);
         // wallpapers/*.jpg rotate once a day; otherwise the single wallpaper.jpg (WallpaperRotation).
-        File wallpaper = WallpaperRotation.pick(dir, WALLPAPER_NAME, java.time.LocalDate.now().toEpochDay());
+        File wallpaper = currentWallpaper(ctx, dir);
         // A theme can also switch the wallpaper off while the file is still there.
         if (json != null && json.has("wallpaper") && !bool(json, "wallpaper", true)) wallpaper = null;
         // A festive skin comes only from a theme; config.xml has no festival.
@@ -187,7 +193,19 @@ final class Config {
                 Math.max(1, columns), Math.max(0, rowsBelow), animations, advancedEffects,
                 shamsi, moduleCards, reducedMotion, vpn, homeSettings, background,
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, appKeys, wallpaper, applied,
-                festival);
+                festival, json == null ? 0 : color(json, "text_color", 0));
+    }
+
+    /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */
+    static File currentWallpaper(Context ctx) {
+        return currentWallpaper(ctx, dir(ctx));
+    }
+
+    static File currentWallpaper(Context ctx, File dir) {
+        SharedPreferences p = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        long today = java.time.LocalDate.now().toEpochDay();
+        String pick = p.getLong(WALLPAPER_PICK_DAY, Long.MIN_VALUE) == today ? p.getString(WALLPAPER_PICK, null) : null;
+        return WallpaperRotation.pick(dir, WALLPAPER_NAME, today, pick);
     }
 
     private static void syncThemeChoices(SharedPreferences choices, File dir, File config) {
