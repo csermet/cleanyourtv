@@ -434,6 +434,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * costs a screen-sized bitmap (about 4 MB at 1080p), which is the price of a wallpaper on a 1 GB TV.
      * A picture over 4K is refused rather than decoded (#166); the plain colour stays.
      */
+    /** Android's low-RAM flag, or under 2 GB of memory: those sets keep the half-size RGB_565 wallpaper. */
+    private boolean isLowRam() {
+        android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        if (am == null) return true;
+        android.app.ActivityManager.MemoryInfo mi = new android.app.ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        return am.isLowRamDevice() || mi.totalMem < 2_000_000_000L;
+    }
+
     private void showWallpaper(File file) {
         try {
             android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -453,7 +462,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 opts.inDensity = scale[0];
                 opts.inTargetDensity = scale[1];
             }
-            opts.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;   // no alpha needed, half the memory
+            // Full colour on TVs with RAM to spare (no banding in skies and gradients); RGB_565 halves the
+            // bitmap on low-RAM sets, where it was the upstream default (#166).
+            opts.inPreferredConfig = isLowRam() ? android.graphics.Bitmap.Config.RGB_565
+                    : android.graphics.Bitmap.Config.ARGB_8888;
             android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
             if (bmp == null) return;
             android.widget.ImageView wall = new android.widget.ImageView(this);
