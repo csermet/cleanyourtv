@@ -42,8 +42,19 @@ final class PlexClient {
 
     static final class Item {
         final String ratingKey, title, subtitle, image, guid;
-        Item(String ratingKey, String title, String subtitle, String image, String guid) {
+        /** "movie" or "show"; for a show, its rating key and the season the card is about (0 when unknown). */
+        final String type, showKey;
+        final int season;
+        /** watch.plex.tv slug from Plex's online metadata, or "" when unknown. */
+        final String slug;
+        Item(String ratingKey, String title, String subtitle, String image, String guid,
+             String type, String showKey, int season, String slug) {
             this.ratingKey = ratingKey; this.title = title; this.subtitle = subtitle; this.image = image; this.guid = guid;
+            this.type = type; this.showKey = showKey; this.season = season; this.slug = slug;
+        }
+
+        Item with(String newTitle, String newSlug) {
+            return new Item(ratingKey, newTitle, subtitle, image, guid, type, showKey, season, newSlug);
         }
     }
 
@@ -194,38 +205,81 @@ final class PlexClient {
     }
 
     /**
-     * Libraries set to original titles show anime in Japanese; for a matched item (plex:// guid) whose
-     * title is not in Latin letters, ask Plex's online metadata for the English title. Cached per guid.
+     * Plex's online metadata for every matched item (plex:// guid): the watch.plex.tv slug for opening
+     * its page, and the English title where the library shows original (e.g. Japanese) titles. Cached
+     * per guid; a failed lookup is tried again on the next load.
      */
     private List<Item> englishTitles(List<Item> items) {
         String token = prefs.getString(TOKEN, null);
         List<Item> res = new ArrayList<>();
         for (Item it : items) {
-            String title = it.title;
-            if (token != null && !latin(title) && it.guid.startsWith("plex://")) {
+            String title = it.title, slug = "";
+            if (token != null && it.guid.startsWith("plex://")) {
                 String en = prefs.getString("en:" + it.guid, null);
-                if (en == null) {
-                    en = fetchEnglishTitle(it.guid, token);
-                    if (en != null) prefs.edit().putString("en:" + it.guid, en).apply();
+                slug = prefs.getString("slug:" + it.guid, null);
+                if (en == null || slug == null) {
+                    String[] meta = fetchOnlineMeta(it.guid, token);
+                    if (meta != null) {
+                        en = meta[0];
+                        slug = meta[1];
+                        prefs.edit().putString("en:" + it.guid, en).putString("slug:" + it.guid, slug).apply();
+                    }
                 }
-                if (en != null && !en.isEmpty() && latin(en)) title = en;
+                if (slug == null) slug = "";
+                if (!latin(title) && en != null && !en.isEmpty() && latin(en)) title = en;
             }
-            res.add(new Item(it.ratingKey, title, it.subtitle, it.image, it.guid));
+            res.add(it.with(title, slug));
         }
         return res;
     }
 
-    private String fetchEnglishTitle(String guid, String token) {
+    /** {English title, slug} from metadata.provider.plex.tv, or null on failure. */
+    private String[] fetchOnlineMeta(String guid, String token) {
         try {
             String id = guid.substring(guid.lastIndexOf('/') + 1);
             JSONObject mc = new JSONObject(request("GET",
                     "https://metadata.provider.plex.tv/library/metadata/" + enc(id) + "?X-Plex-Language=en-US", token))
                     .optJSONObject("MediaContainer");
             JSONArray md = mc == null ? null : mc.optJSONArray("Metadata");
-            return md != null && md.length() > 0 ? md.getJSONObject(0).optString("title", "") : "";
+            if (md == null || md.length() == 0) return new String[]{"", ""};
+            JSONObject m = md.getJSONObject(0);
+            return new String[]{m.optString("title", ""), m.optString("slug", "")};
         } catch (Exception e) {
-            return null;   // try again on the next load
+            return null;
         }
+    }
+
+    /**
+     * The item's page in the Plex app (watch.plex.tv opens even while Plex is still starting): a film's
+     * page, or for a show the season you are in, from the server's On Deck episode, else the first
+     * season with unwatched episodes, else the card's own season. Null when there is no slug.
+     */
+    String watchUrl(Item it) {
+        if (it.slug.isEmpty()) return null;
+        if ("movie".equals(it.type)) return "https://watch.plex.tv/movie/" + it.slug;
+        int season = 0;
+        if (!it.showKey.isEmpty()) {
+            try {
+                JSONObject mc = new JSONObject(server("/library/metadata/" + it.showKey + "?includeOnDeck=1"))
+                        .optJSONObject("MediaContainer");
+                JSONArray md = mc == null ? null : mc.optJSONArray("Metadata");
+                JSONObject deck = md != null && md.length() > 0 ? md.getJSONObject(0).optJSONObject("OnDeck") : null;
+                JSONArray deckMd = deck == null ? null : deck.optJSONArray("Metadata");
+                if (deckMd != null && deckMd.length() > 0) season = deckMd.getJSONObject(0).optInt("parentIndex", 0);
+                if (season == 0) {
+                    JSONArray seasons = metadata(server("/library/metadata/" + it.showKey + "/children"));
+                    for (int i = 0; i < seasons.length() && season == 0; i++) {
+                        JSONObject s = seasons.getJSONObject(i);
+                        int idx = s.optInt("index", 0);
+                        if (idx > 0 && s.optInt("viewedLeafCount", 0) < s.optInt("leafCount", 0)) season = idx;
+                    }
+                }
+            } catch (Exception ignored) {
+                // fall back to the card's season
+            }
+        }
+        if (season == 0) season = it.season;
+        return "https://watch.plex.tv/show/" + it.slug + (season > 0 ? "/season/" + season : "");
     }
 
     /** True when every letter is Latin (digits and punctuation do not count). */
@@ -240,7 +294,8 @@ final class PlexClient {
 
     private static void add(List<Item> out, Set<String> seen, JSONObject m) {
         String type = m.optString("type");
-        String key, title, sub, image, guid;
+        String key, title, sub, image, guid, kind = "show", showKey;
+        int season = 0;
         switch (type) {
             case "episode":
                 key = m.optString("ratingKey");
@@ -248,6 +303,8 @@ final class PlexClient {
                 sub = "S" + m.optInt("parentIndex") + " · E" + m.optInt("index");
                 image = first(m, "thumb", "grandparentArt", "art");
                 guid = m.optString("grandparentGuid", "");
+                showKey = m.optString("grandparentRatingKey", "");
+                season = m.optInt("parentIndex", 0);
                 if (!seen.add("show:" + m.optString("grandparentRatingKey", key))) return;
                 break;
             case "season":
@@ -256,6 +313,8 @@ final class PlexClient {
                 sub = m.optString("title");
                 image = first(m, "art", "parentArt", "thumb");
                 guid = m.optString("parentGuid", "");
+                showKey = m.optString("parentRatingKey", "");
+                season = m.optInt("index", 0);
                 if (!seen.add("show:" + m.optString("parentRatingKey", key))) return;
                 break;
             case "movie":
@@ -265,13 +324,15 @@ final class PlexClient {
                 sub = m.has("year") ? String.valueOf(m.optInt("year")) : "";
                 image = first(m, "art", "thumb");
                 guid = m.optString("guid", "");
+                kind = type;
+                showKey = "show".equals(type) ? key : "";
                 if (!seen.add(("show".equals(type) ? "show:" : "movie:") + key)) return;
                 break;
             default:
                 return;
         }
         if (key.isEmpty() || title.isEmpty()) return;
-        out.add(new Item(key, title, sub, image, guid));
+        out.add(new Item(key, title, sub, image, guid, kind, showKey, season, ""));
     }
 
     private static String first(JSONObject m, String... keys) {

@@ -129,6 +129,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private float heroTextPx;
     /** single_row: the title's bottom edge, just above the band; its top follows its height. */
     private float heroBottom = Float.NaN;
+    /** single_row: the title box has been lined up with the first tile's left edge. */
+    private boolean heroAligned;
     /** Config.plexRow: the Plex recommended row under the single row; null when off. */
     private RecyclerView plexRow;
     private PlexRowAdapter plexAdapter;
@@ -802,7 +804,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private void showHero(int position, float dockTopInRoot) {
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
-        if (singleRow) heroBottom = dockTopInRoot - 12 * density;
+        if (singleRow) {
+            heroBottom = dockTopInRoot - 12 * density;
+            alignHeroWithFirstTile();
+        }
         float y = singleRow ? heroBottom - heroName.getHeight()
                 : dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
         heroY = y;
@@ -1026,10 +1031,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) heroName.getLayoutParams();
         lp.setMarginStart(Math.max(0, lp.getMarginStart() - ph));
         heroName.setLayoutParams(lp);
+        // Clock and greeting closer to the top-left corner, the pills as close to the top-right one.
+        View header = (View) findViewById(R.id.leftBlock).getParent();
+        ViewGroup.MarginLayoutParams hp = (ViewGroup.MarginLayoutParams) header.getLayoutParams();
+        hp.setMarginStart((int) (-24 * density));
+        hp.setMarginEnd((int) (-24 * density));
+        hp.topMargin = (int) (-12 * density);
+        header.setLayoutParams(hp);
+        // The column around it would clip the header at its padding otherwise.
+        ViewGroup column = (ViewGroup) header.getParent();
+        column.setClipToPadding(false);
+        column.setClipChildren(false);
         // One line for an app, two for a Plex card: keep the bottom edge on the band either way.
         heroName.addOnLayoutChangeListener((v, l, tp, r, b, ol, ot, or, ob) -> {
             if (!Float.isNaN(heroBottom) && (b - tp) != (ob - ot)) v.setY(heroBottom - (b - tp));
         });
+    }
+
+    /** Once, while the row is at its start: the title box's left edge on the first tile's left edge. */
+    private void alignHeroWithFirstTile() {
+        if (heroAligned || grid.computeHorizontalScrollOffset() != 0) return;
+        RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(0);
+        if (vh == null) return;
+        View card = vh.itemView.findViewById(R.id.card);
+        Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
+        root.offsetDescendantRectToMyCoords(card, r);
+        if (r.left <= 0) return;
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) heroName.getLayoutParams();
+        if (lp.getMarginStart() != r.left) {
+            lp.setMarginStart(r.left);
+            heroName.setLayoutParams(lp);
+        }
+        heroAligned = true;
     }
 
     /** Long Plex titles shrink (down to 24sp) to fit the screen instead of ending in an ellipsis. */
@@ -1175,14 +1208,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
     @Override
     public void onPlexClick(PlexClient.Item item) {
-        Intent deep = new Intent(Intent.ACTION_VIEW, Uri.parse(plex.deepLink(item.ratingKey)))
-                .setPackage(PlexClient.PLEX_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            startActivity(deep);
-        } catch (ActivityNotFoundException e) {
-            Intent app = getPackageManager().getLeanbackLaunchIntentForPackage(PlexClient.PLEX_PACKAGE);
-            if (app != null) open(app);
-        }
+        // The season you are in (or the film's page), looked up on the server first: a quick LAN call.
+        PLEX_EXEC.execute(() -> {
+            String url = plex.watchUrl(item);
+            runOnUiThread(() -> {
+                if (url != null) {
+                    Intent page = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            .setPackage(PlexClient.PLEX_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    try {
+                        startActivity(page);
+                        return;
+                    } catch (ActivityNotFoundException ignored) {
+                    }
+                }
+                Intent app = getPackageManager().getLeanbackLaunchIntentForPackage(PlexClient.PLEX_PACKAGE);
+                if (app != null) open(app);
+            });
+        });
     }
 
     @Override
