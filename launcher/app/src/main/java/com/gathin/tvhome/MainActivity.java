@@ -135,6 +135,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private static final float ROW_SMALL = 0.70f;
     /** single_row: the bands reach this far past the column's padding, towards the screen edges; the tiles stay put. */
     private static final float BAND_OUTSET_DP = 16f;
+    /** single_row: the rows' side padding; the band is drawn 6dp from the row's edge, so tiles sit ~20dp inside it. */
+    private static final float ROW_SIDE_DP = 22f;
     private static final float ROW_GAP_DP = 12f, PLEX_INNER_TOP_DP = 10f, APPS_INNER_BOTTOM_DP = 80f;
     private boolean plexFocused;
     private ValueAnimator rowAnim;
@@ -317,7 +319,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             wlp.setMarginStart(-out);
             wlp.setMarginEnd(-out);
             ((View) grid.getParent()).setLayoutParams(wlp);
-            int side = (int) (28 * density) + out;
+            int side = (int) (ROW_SIDE_DP * density);   // tiles about 20dp inside the band's ends
             grid.setPadding(side, grid.getPaddingTop(), side, grid.getPaddingBottom());
             grid.setClipToPadding(true);
         } else grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
@@ -1151,7 +1153,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         plexBand.draw = false;
         plexRow.addItemDecoration(plexBand);
         if (appsBand != null) appsBand.draw = false;
-        int side = (int) ((28 + BAND_OUTSET_DP) * density);
+        int side = (int) (ROW_SIDE_DP * density);
         plexRow.setPadding(side, (int) (8 * density), side, (int) (16 * density));
         plexRow.setClipToPadding(true);
         plexRow.setVisibility(View.GONE);
