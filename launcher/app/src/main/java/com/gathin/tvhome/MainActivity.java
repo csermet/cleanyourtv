@@ -154,11 +154,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private TextView statusNodes, statusUsage;
     private final ServerStatus serverStatus = new ServerStatus();
     private static final java.util.concurrent.ExecutorService STATUS_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
+    /** Every five minutes while Home is shown; a return to Home within that keeps the last values. */
+    private static final long STATUS_EVERY_MS = 5 * 60_000L;
+    private long statusAt = Long.MIN_VALUE / 2;
     private final Runnable statusTick = new Runnable() {
         @Override
         public void run() {
-            refreshStatus();
-            handler.postDelayed(this, 60_000L);
+            long age = android.os.SystemClock.elapsedRealtime() - statusAt;
+            if (age >= STATUS_EVERY_MS) {
+                statusAt = android.os.SystemClock.elapsedRealtime();
+                refreshStatus();
+                age = 0;
+            }
+            handler.postDelayed(this, STATUS_EVERY_MS - age);
         }
     };
     private View wallView;
