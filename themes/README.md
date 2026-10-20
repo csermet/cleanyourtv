@@ -49,6 +49,7 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `greeting` | string | Replaces the time-of-day greeting while the festive skin is on |
 | `accent_color` | `#RRGGBB` | Colour of the focus glow while the festive skin is on; diya gold if not set |
 | `settings_key_keycodes` | list of keycodes | Remote buttons that open Settings, for `HomeKeyService` (TCL Google TV gear: `[83]`) |
+| `app_keys` | object, keycode → package | Remote app buttons for `HomeKeyService`, e.g. `{"4062": "com.netflix.ninja", "4163": "com.tubitv"}`; a button can open any installed app (TCL Google TV codes in `config.xml`) |
 | `settings_key_panel` | bool | Those buttons open a small quick settings panel (TV settings, Display, Network, Apps, Launcher settings) instead of the TV's Settings |
 
 ## Wallpapers

@@ -2,9 +2,13 @@ package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
+
+import java.util.Collections;
+import java.util.Map;
 
 /**
  * Sends the remote's Home button to this launcher on remotes that emit KEYCODE_ALL_APPS for Home
@@ -21,6 +25,7 @@ public class HomeKeyService extends AccessibilityService {
     private int[] settingsScancodes = new int[0];
     private int[] settingsKeycodes = new int[0];
     private boolean settingsPanel;
+    private Map<Integer, String> appKeys = Collections.emptyMap();
 
     @Override
     protected void onServiceConnected() {
@@ -30,6 +35,16 @@ public class HomeKeyService extends AccessibilityService {
         Config config = Config.load(this);
         settingsKeycodes = config.settingsKeycodes;
         settingsPanel = config.settingsKeyPanel;
+        appKeys = config.appKeys;
+    }
+
+    /** The app a remote app button opens, or null to let the key through (unmapped, or the app is missing). */
+    private Intent appKeyIntent(int keyCode) {
+        String pkg = appKeys.get(keyCode);
+        if (pkg == null) return null;
+        PackageManager pm = getPackageManager();
+        Intent launch = pm.getLeanbackLaunchIntentForPackage(pkg);
+        return launch != null ? launch : pm.getLaunchIntentForPackage(pkg);
     }
 
     private boolean isSettingsKey(KeyEvent event) {
@@ -47,6 +62,14 @@ public class HomeKeyService extends AccessibilityService {
                 Intent open = settingsPanel ? new Intent(this, QuickSettingsActivity.class)
                         : new Intent(Settings.ACTION_SETTINGS);
                 startActivity(open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            }
+            return true;
+        }
+        // App buttons (Netflix, YouTube, ...) the stock launcher handled; also lets a button open another app.
+        Intent app = appKeyIntent(event.getKeyCode());
+        if (app != null) {
+            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+                startActivity(app.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED));
             }
             return true;
         }

@@ -60,6 +60,13 @@
          with TV settings, Display, Network, Apps (re-enable an app) and Launcher settings, over whatever is on screen.
          Both keys can also be set from a theme's config.json ("settings_key_keycodes": [83]). -->
     <bool name="settings_key_panel">false</bool>
+    <!-- Remote app buttons the stock launcher handled, as "keycode=package" (HomeKeyService, HOME_KEY_SERVICE=1).
+         TCL Google TV remotes send their own keycodes: Netflix 4062, Prime Video 4099, YouTube 4065, Apple TV 4160,
+         Pluto TV 4163. Point a button at any installed app. Find a keycode with
+         `tools/tv.py 'logcat -v time | grep handleKeyBeforeQueueing'` while pressing it. A button whose app is
+         missing or disabled is left alone. A theme sets the same as "app_keys": {"4163": "com.tubitv"}. -->
+    <string-array name="app_keys">
+    </string-array>
 
     <!-- Show the Solar Hijri (Shamsi) date used in Iran and Afghanistan, e.g. "27 Mehr 1405", above the
          Gregorian date. -->
