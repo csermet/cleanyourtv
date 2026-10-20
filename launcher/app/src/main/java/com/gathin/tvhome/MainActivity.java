@@ -3,6 +3,7 @@ package com.gathin.tvhome;
 import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -99,6 +100,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private View ambient;
     private TextView heroName;
     private int ambientColor = -1;
+    /** Config.ambientGlow as a drawable alpha, 0 to 255. */
+    private int ambientAlpha = 255;
     private ValueAnimator ambientAnimator;
     private boolean heroShown;
     private boolean animations;
@@ -243,6 +246,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The glow is one bitmap, so its alpha can be applied while drawing it. Otherwise every frame of
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
+        ambientAlpha = Math.round(255 * cfg.ambientGlow / 100f);
+        if (ambientAlpha == 0) ambient.setVisibility(View.GONE);
         if (cfg.textColor != 0) tintHeader(cfg.textColor);
         heroName = findViewById(R.id.heroName);
         greeting = findViewById(R.id.greeting);
@@ -862,6 +867,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         // The default tint mode, SRC_IN, keeps the mask's alpha and takes the colour from the tint.
         glow.setTint(0xFF000000 | color);
+        glow.setAlpha(ambientAlpha);
     }
 
     private void transitionAmbient(int color) {
@@ -943,6 +949,30 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // The default focus search clicks for Left/Right; Up/Down are handled here, so click for them too.
         grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_UP
                 ? SoundEffectConstants.NAVIGATION_UP : SoundEffectConstants.NAVIGATION_DOWN);
+        return true;
+    }
+
+    @Override
+    public boolean onTileMenu(int position) {
+        String pkg = adapter.pkgAt(position);
+        if (pkg == null) return false;
+        String[] items = {getString(R.string.move_left), getString(R.string.move_right),
+                getString(R.string.hide_app), getString(R.string.app_info)};
+        new AlertDialog.Builder(this)
+                .setTitle(adapter.labelAt(position))
+                .setItems(items, (dialog, which) -> {
+                    if (which <= 1) {
+                        int delta = (which == 0) != rtlAppGrid ? -1 : 1;
+                        TileOrder.saveOrder(this, TileOrder.move(adapter.currentOrder(), pkg, delta));
+                        reloadApps(false);   // focus follows the app (lastFocusedKey)
+                    } else if (which == 2) {
+                        TileOrder.hide(this, pkg);
+                        reloadApps(false);
+                    } else {
+                        open(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg)));
+                    }
+                })
+                .show();
         return true;
     }
 

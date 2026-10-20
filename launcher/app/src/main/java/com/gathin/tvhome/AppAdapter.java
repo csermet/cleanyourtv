@@ -52,6 +52,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
         /** Called for a D-pad direction key on a tile. Return true when handled (focus stays put). */
         boolean onTileVerticalKey(int position, int keyCode);
+
+        /** Hold OK on a tile: return true when a menu was shown, false for the old App info shortcut. */
+        default boolean onTileMenu(int position) { return false; }
     }
 
     static final class Entry {
@@ -155,12 +158,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         Intent probe = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
         List<ResolveInfo> found = pm.queryIntentActivities(probe, 0);
         Map<String, Cards.Card> cardByPkg = new HashMap<>();
+        // The owner's order and hidden apps from the tile menu come first, then config.
+        List<String> userOrder = TileOrder.order(ctx);
+        java.util.Set<String> userHidden = TileOrder.hidden(ctx);
         for (Cards.Card c : cards) cardByPkg.put(c.pkg, c);
         List<Entry> fresh = new ArrayList<>();
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
-            if (pkg.equals(ctx.getPackageName()) || hidden.contains(pkg)) continue;
+            if (pkg.equals(ctx.getPackageName()) || hidden.contains(pkg) || userHidden.contains(pkg)) continue;
             ComponentName component = new ComponentName(pkg, ri.activityInfo.name);
             Cards.Card card = cardByPkg.get(pkg);
             if (card != null && !card.component.equals(component)) continue;   // the card stands in for this tile
@@ -175,6 +181,12 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             }
         }
         Collections.sort(fresh, (a, b) -> {
+            int ua = userOrder.indexOf(a.pkg), ub = userOrder.indexOf(b.pkg);
+            if (ua >= 0 || ub >= 0) {
+                if (ua < 0) return 1;
+                if (ub < 0) return -1;
+                return Integer.compare(ua, ub);
+            }
             int fa = favourites.indexOf(a.pkg), fb = favourites.indexOf(b.pkg);
             if (fa >= 0 || fb >= 0) {
                 if (fa < 0) return 1;
@@ -288,6 +300,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         }
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
+            int pos = h.getBindingAdapterPosition();
+            if (listener != null && pos != RecyclerView.NO_POSITION && listener.onTileMenu(pos)) return true;
             Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + e.pkg));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             try {
@@ -357,6 +371,20 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     /** A position focus can land on: an empty dock slot gives the last dock app. */
     int focusablePosition(int position) {
         return DockSlots.focusable(position, docked, emptySlots);
+    }
+
+    /** The package of an app tile, or null for an empty slot or the Default-home tile. */
+    String pkgAt(int position) {
+        if (position < 0 || position >= items.size()) return null;
+        Entry e = items.get(position);
+        return e.kind == Entry.APP || e.kind == Entry.CARD ? e.pkg : null;
+    }
+
+    /** Packages in on-screen order, for the tile menu's Move. */
+    List<String> currentOrder() {
+        List<String> out = new ArrayList<>();
+        for (Entry e : items) if ((e.kind == Entry.APP || e.kind == Entry.CARD) && !out.contains(e.pkg)) out.add(e.pkg);
+        return out;
     }
 
     String labelAt(int position) {

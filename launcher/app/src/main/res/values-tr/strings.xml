@@ -64,4 +64,12 @@
     <string name="wallpaper_daily">günlük karışık</string>
     <string name="wallpaper_shuffle_now">Şimdi karıştır</string>
     <string name="wallpaper_hint">Bugün için bir resim seç ya da şimdi karıştır. Günlük karışık sıra yarın devam eder.</string>
+    <string name="move_left">Sola taşı</string>
+    <string name="move_right">Sağa taşı</string>
+    <string name="hide_app">Gizle</string>
+    <string name="app_info">Uygulama bilgisi</string>
+    <string name="show_hidden">Gizli uygulamaları göster (%1$d)</string>
+    <string name="reset_order">Uygulama sırasını sıfırla</string>
+    <string name="order_reset_done">Uygulama sırası sıfırlandı</string>
+    <string name="tile_menu_hint">Taşımak ya da gizlemek için bir kutucukta OK\'e basılı tut.</string>
 </resources>

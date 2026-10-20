@@ -70,4 +70,12 @@
     <string name="wallpaper_daily">daily shuffle</string>
     <string name="wallpaper_shuffle_now">Shuffle now</string>
     <string name="wallpaper_hint">Pick a picture for today, or shuffle now. The daily shuffle carries on tomorrow.</string>
+    <string name="move_left">Move left</string>
+    <string name="move_right">Move right</string>
+    <string name="hide_app">Hide</string>
+    <string name="app_info">App info</string>
+    <string name="show_hidden">Show hidden apps (%1$d)</string>
+    <string name="reset_order">Reset app order</string>
+    <string name="order_reset_done">App order reset</string>
+    <string name="tile_menu_hint">Hold OK on a tile to move or hide it.</string>
 </resources>

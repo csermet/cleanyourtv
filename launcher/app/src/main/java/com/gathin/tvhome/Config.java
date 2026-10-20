@@ -82,6 +82,8 @@ final class Config {
     final int topButtonsSize;
     /** band_opacity: single_row band opacity in percent, 20 to 100 (theme only). */
     final int bandOpacity;
+    /** ambient_glow: strength of the focused app's colour glow in percent, 0 turns it off (theme only). */
+    final int ambientGlow;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -94,7 +96,8 @@ final class Config {
                    boolean showHomeSettingsShortcut, int backgroundColor, int skyIntensity,
                    int[] settingsKeycodes, boolean settingsKeyPanel, Map<Integer, String> appKeys,
                    File wallpaper, boolean overlayApplied, Festival festival, int textColor, boolean singleRow,
-                   boolean networkPill, int topButtonsSize, int bandOpacity) {
+                   boolean networkPill, int topButtonsSize, int bandOpacity,
+                   int ambientGlow) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -125,6 +128,7 @@ final class Config {
         this.networkPill = networkPill;
         this.topButtonsSize = topButtonsSize;
         this.bandOpacity = bandOpacity;
+        this.ambientGlow = ambientGlow;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -210,7 +214,8 @@ final class Config {
                 json != null && bool(json, "single_row", false),
                 json == null || bool(json, "network_pill", true),
                 json == null ? 100 : integer(json, "top_buttons_size", 100, 60, 100),
-                json == null ? 100 : integer(json, "band_opacity", 100, 20, 100));
+                json == null ? 100 : integer(json, "band_opacity", 100, 20, 100),
+                json == null ? 100 : integer(json, "ambient_glow", 100, 0, 100));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

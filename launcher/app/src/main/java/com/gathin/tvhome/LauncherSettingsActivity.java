@@ -103,6 +103,16 @@ public final class LauncherSettingsActivity extends Activity {
         } else {
             wallpaperChoice.setOnClickListener(v -> pickWallpaper());
         }
+        findViewById(R.id.showHiddenChoice).setOnClickListener(v -> {
+            TileOrder.showHidden(this);
+            setResult(RESULT_OK);
+            refresh();
+        });
+        findViewById(R.id.resetOrderChoice).setOnClickListener(v -> {
+            TileOrder.resetOrder(this);
+            setResult(RESULT_OK);
+            Toast.makeText(this, R.string.order_reset_done, Toast.LENGTH_SHORT).show();
+        });
         refresh();
         columnChoices[Math.max(0, Math.min(columns - 4, 3))].requestFocus();
     }
@@ -150,6 +160,7 @@ public final class LauncherSettingsActivity extends Activity {
         advancedChoice.setEnabled(animations);
         advancedChoice.setAlpha(animations ? 1f : 0.5f);
         followThemeChoice.setSelected(!hasOnTvChoices());
+        ((TextView) findViewById(R.id.showHiddenChoice)).setText(getString(R.string.show_hidden, TileOrder.hidden(this).size()));
         if (wallpaperChoice != null && wallpaperChoice.getVisibility() == View.VISIBLE) {
             File now = Config.currentWallpaper(this);
             boolean picked = choices.getLong(Config.WALLPAPER_PICK_DAY, Long.MIN_VALUE) == LocalDate.now().toEpochDay()
