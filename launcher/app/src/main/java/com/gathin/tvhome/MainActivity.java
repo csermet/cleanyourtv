@@ -131,6 +131,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private float heroBottom = Float.NaN;
     /** single_row: the title box has been lined up with the first tile's left edge. */
     private boolean heroAligned;
+    /** single_row + plex_row: the focused row is full size, the other ROW_SMALL; the gap between the bands stays. */
+    private static final float ROW_SMALL = 0.82f;
+    private static final float ROW_GAP_DP = 12f, PLEX_INNER_TOP_DP = 10f, APPS_INNER_BOTTOM_DP = 80f;
+    private boolean plexFocused;
+    private ValueAnimator rowAnim;
+    /** The focused app tile's layout top in root coordinates, for the title above the (scaled) row. */
+    private float appsCardTop = Float.NaN;
     /** Config.plexRow: the Plex recommended row under the single row; null when off. */
     private RecyclerView plexRow;
     private PlexRowAdapter plexAdapter;
@@ -740,6 +747,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     @Override
     public void onTileFocused(int position, View card) {
         lastFocused = position;
+        setRowFocus(false);
         lastFocusedKey = adapter.keyAt(position);
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
         Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
@@ -750,6 +758,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         float h = card.getHeight() * scale + 2 * pad;
         float x = r.exactCenterX() - w / 2f;
         float y = r.exactCenterY() - h / 2f - (advancedEffects ? 4f * density : 0f);
+        if (singleRow && grid.getTranslationY() != 0f) y += grid.getTranslationY();   // the row is shifted (plex_row)
 
         ViewGroup.LayoutParams lp = glass.getLayoutParams();
         if (lp.width != (int) w || lp.height != (int) h) {
@@ -805,7 +814,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
         if (singleRow) {
-            heroBottom = dockTopInRoot - 12 * density;
+            appsCardTop = dockTopInRoot;
+            heroBottom = appsRowTopVisual() - 12 * density;
             alignHeroWithFirstTile();
         }
         float y = singleRow ? heroBottom - heroName.getHeight()
@@ -1058,8 +1068,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         root.offsetDescendantRectToMyCoords(card, r);
         if (r.left <= 0) return;
         ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) heroName.getLayoutParams();
-        if (lp.getMarginStart() != r.left) {
-            lp.setMarginStart(r.left);
+        int start = Math.max(0, r.left - heroName.getPaddingLeft());   // the text, not the box, on the tile's edge
+        if (lp.getMarginStart() != start) {
+            lp.setMarginStart(start);
             heroName.setLayoutParams(lp);
         }
         heroAligned = true;
@@ -1172,6 +1183,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         if (items == null || items.isEmpty()) {
             if (plexRow.hasFocus()) focusTile(lastFocused);
             plexRow.setVisibility(View.GONE);
+            applyRows(1f, 1f);
             glp.bottomMargin = 0;
             grid.setLayoutParams(glp);
             return;
@@ -1185,9 +1197,86 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             grid.setLayoutParams(glp);
             // The app row moved up: once it is laid out there, put the highlight and title back on its tile.
             grid.post(() -> grid.post(() -> {
+                applyRows(plexFocused ? ROW_SMALL : 1f, plexFocused ? 1f : ROW_SMALL);
                 if (grid.hasFocus()) focusTile(lastFocused);
             }));
         });
+    }
+
+    /** The focused app tile's top on screen, with the app row's current scale and shift. */
+    private float appsRowTopVisual() {
+        if (Float.isNaN(appsCardTop)) return Float.NaN;
+        float bottom = gridBottomInRoot() + grid.getTranslationY();
+        return bottom - grid.getScaleY() * (gridBottomInRoot() - appsCardTop);
+    }
+
+    private float gridBottomInRoot() {
+        Rect r = new Rect(0, 0, grid.getWidth(), grid.getHeight());
+        root.offsetDescendantRectToMyCoords(grid, r);
+        return r.bottom;
+    }
+
+    private void setRowFocus(boolean plex) {
+        if (plexRow == null || plexRow.getVisibility() != View.VISIBLE || plex == plexFocused) return;
+        plexFocused = plex;
+        float fromA = grid.getScaleY(), fromP = plexRow.getScaleY();
+        float toA = plex ? ROW_SMALL : 1f, toP = plex ? 1f : ROW_SMALL;
+        if (rowAnim != null) rowAnim.cancel();
+        if (!animations || reducedMotion) {
+            applyRows(toA, toP);
+            if (!plex) focusTile(lastFocused);
+            return;
+        }
+        rowAnim = ValueAnimator.ofFloat(0f, 1f);
+        rowAnim.setDuration(220);
+        rowAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        rowAnim.addUpdateListener(a -> {
+            float f = (float) a.getAnimatedValue();
+            applyRows(fromA + (toA - fromA) * f, fromP + (toP - fromP) * f);
+        });
+        rowAnim.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (rowAnim != animation) return;
+                rowAnim = null;
+                // Snap the highlight onto the full-size tile once the row has settled.
+                if (!plexFocused && grid.hasFocus()) focusTile(lastFocused);
+            }
+        });
+        rowAnim.start();
+    }
+
+    /**
+     * Scales both rows about their first tile's left edge and their bottom, then shifts the app row so
+     * its band ends ROW_GAP_DP above the Plex band's top, whatever the two scales are: the rows never
+     * touch, and a small Plex row lets the app row sit lower.
+     */
+    private void applyRows(float sa, float sp) {
+        if (plexRow == null) return;
+        grid.setPivotX(grid.getPaddingLeft());
+        grid.setPivotY(grid.getHeight());
+        plexRow.setPivotX(plexRow.getPaddingLeft());
+        plexRow.setPivotY(plexRow.getHeight());
+        grid.setScaleX(sa);
+        grid.setScaleY(sa);
+        plexRow.setScaleX(sp);
+        plexRow.setScaleY(sp);
+        float plexTop = plexRow.getBottom() - sp * plexRow.getHeight();
+        float plexBandTop = plexTop + sp * PLEX_INNER_TOP_DP * density;
+        float ty = plexBandTop - ROW_GAP_DP * density + sa * APPS_INNER_BOTTOM_DP * density - grid.getBottom();
+        if (plexRow.getVisibility() != View.VISIBLE) ty = 0f;
+        float dy = ty - grid.getTranslationY();
+        grid.setTranslationY(ty);
+        if (glassShown && dy != 0f) {
+            glassTargetY += dy;
+            glassScrollShift += dy;
+            glass.setTranslationY(glass.getTranslationY() + dy);
+        }
+        float top = appsRowTopVisual();
+        if (!Float.isNaN(top) && heroShown) {
+            heroBottom = top - 12 * density;
+            heroName.setY(heroBottom - heroName.getHeight());
+        }
     }
 
     private void focusPlex() {
@@ -1230,6 +1319,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     @Override
     public void onPlexFocused(int position) {
         plexLast = position;
+        setRowFocus(true);
         hideGlass();
         PlexClient.Item it = plexAdapter.itemAt(position);
         if (it == null) {
