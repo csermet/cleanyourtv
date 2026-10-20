@@ -459,7 +459,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             float s = cfg.topButtonsSize / 100f;
             bar.addOnLayoutChangeListener((v, l, tp, r, b, ol, ot, or, ob) -> {
                 v.setPivotX(v.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL ? 0 : r - l);
-                v.setPivotY(b - tp);
+                v.setPivotY(singleRow ? 0 : b - tp);   // single_row: pinned to the top-right corner
             });
             bar.setScaleX(s);
             bar.setScaleY(s);
@@ -1084,6 +1084,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         hp.setMarginEnd((int) (-24 * density));
         hp.topMargin = (int) (-12 * density);
         header.setLayoutParams(hp);
+        // The pills sit at the top-right corner instead of on the date line.
+        View bar = findViewById(R.id.topButtons);
+        android.widget.RelativeLayout.LayoutParams blp = (android.widget.RelativeLayout.LayoutParams) bar.getLayoutParams();
+        blp.removeRule(android.widget.RelativeLayout.ALIGN_BOTTOM);
+        blp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP);
+        blp.topMargin = (int) (4 * density);
+        blp.bottomMargin = 0;
+        blp.setMarginEnd((int) (-10 * density));
+        bar.setLayoutParams(blp);
         // The column around it would clip the header at its padding otherwise.
         ViewGroup column = (ViewGroup) header.getParent();
         column.setClipToPadding(false);
