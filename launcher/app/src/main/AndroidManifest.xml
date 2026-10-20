@@ -9,6 +9,9 @@
 
     <!-- Only for the optional Plex row (theme plex_row): plex.tv sign-in and the owner's own server. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Only for night mode's earlier screensaver (theme night_screensaver_min); granted over adb with
+         appops set com.gathin.tvhome WRITE_SETTINGS allow. Without it night mode only dims. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Needed since Android 10 to read the Wi-Fi network name for the network pill. Never requested at
@@ -66,6 +69,8 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:screenOrientation="landscape" />
+        <receiver android:name=".NightMode$Receiver" android:exported="false" />
+
         <activity
             android:name=".WallpaperPickerActivity"
             android:exported="false"

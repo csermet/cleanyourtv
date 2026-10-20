@@ -147,6 +147,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private static final float ROW_DIM = 0.65f;
     private boolean parallax, openFromTile;
     private boolean inputsPill = true;
+    /** Night mode: the theme's config, and a black layer over the wallpaper at night. */
+    private Config nightCfg;
+    private View nightShade;
     private View wallView;
     private static final float PARALLAX_X_DP = 20f, PARALLAX_Y_DP = 10f, WALL_ZOOM = 1.06f;
     private RowBandDecoration appsBand;
@@ -253,6 +256,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             updateGreeting();
             updateWifiLabel();
             sky.update();
+            updateNight(true);
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -282,6 +286,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         parallax = cfg.parallax;
         openFromTile = cfg.openFromTile;
         inputsPill = cfg.inputsPill;
+        nightCfg = cfg;
         wallpaperShown = cfg.wallpaper;
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
         sky = findViewById(R.id.sky);
@@ -594,6 +599,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             wall.setImageBitmap(bmp);
             root.addView(wall, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             wallView = wall;
+            nightShade = new View(this);
+            nightShade.setBackgroundColor(0xFF000000);
+            nightShade.setAlpha(0f);
+            root.addView(nightShade, 1, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             if (parallax) {
                 // A little larger than the screen: the drift stays inside this margin, so no edge ever shows.
                 wall.setScaleX(WALL_ZOOM);
@@ -654,6 +663,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         updateGreeting();
         updateWifiLabel();
         updateInputsButton();
+        updateNight(false);
+        NightMode.apply(this, nightCfg);
         sky.update();
         handler.postDelayed(minuteTick, MINUTE_MS);
         if (festive && diya != null) {
@@ -1668,6 +1679,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     }
 
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
+    /** Night mode: darken the wallpaper inside the theme's night window, fading when it starts or ends. */
+    private void updateNight(boolean fade) {
+        if (nightShade == null || nightCfg == null || nightCfg.nightStart < 0) return;
+        float want = NightMode.isNight(nightCfg) ? nightCfg.nightDim / 100f : 0f;
+        if (Math.abs(nightShade.getAlpha() - want) < 0.01f) return;
+        nightShade.animate().cancel();
+        if (fade && animations) nightShade.animate().alpha(want).setDuration(1500).start();
+        else nightShade.setAlpha(want);
+    }
+
     private void updateInputsButton() {
         if (!inputsPill) {
             btnInputs.setVisibility(View.GONE);

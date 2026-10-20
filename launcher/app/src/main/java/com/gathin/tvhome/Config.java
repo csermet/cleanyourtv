@@ -100,6 +100,10 @@ final class Config {
     final boolean openFromTile;
     /** inputs_pill: false hides the Inputs pill (the remote's Input key still works) (theme only). */
     final boolean inputsPill;
+    /** night_start / night_end ("HH:MM"): night mode window in minutes of the day, -1 when off (theme only). */
+    final int nightStart, nightEnd;
+    /** night_dim: extra darkening of the wallpaper at night in percent; night_screensaver_min: screensaver delay at night. */
+    final int nightDim, nightSaverMin;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -115,7 +119,7 @@ final class Config {
                    boolean networkPill, int topButtonsSize, int bandOpacity,
                    int ambientGlow, boolean plexRow, String plexLanIp, float rowTiles,
                    int tileGap, int titleSize, boolean parallax, boolean openFromTile,
-                   boolean inputsPill) {
+                   boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -155,6 +159,10 @@ final class Config {
         this.parallax = parallax;
         this.openFromTile = openFromTile;
         this.inputsPill = inputsPill;
+        this.nightStart = nightStart;
+        this.nightEnd = nightEnd;
+        this.nightDim = nightDim;
+        this.nightSaverMin = nightSaverMin;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -249,7 +257,11 @@ final class Config {
                 json == null ? 0 : integer(json, "title_size", 0, 0, 60),
                 json != null && bool(json, "parallax", false),
                 json != null && bool(json, "open_from_tile", false),
-                json == null || bool(json, "inputs_pill", true));
+                json == null || bool(json, "inputs_pill", true),
+                json == null ? -1 : clock(string(json, "night_start", "")),
+                json == null ? -1 : clock(string(json, "night_end", "")),
+                json == null ? 35 : integer(json, "night_dim", 35, 0, 90),
+                json == null ? 0 : integer(json, "night_screensaver_min", 0, 0, 60));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */
@@ -325,6 +337,14 @@ final class Config {
     private static boolean bool(JSONObject o, String key, boolean fallback) {
         Object v = o.opt(key);
         return v instanceof Boolean ? (Boolean) v : fallback;
+    }
+
+    /** "HH:MM" as minutes of the day, or -1 when it does not parse. */
+    static int clock(String s) {
+        if (s == null || !s.matches("\\d{1,2}:\\d{2}")) return -1;
+        String[] p = s.split(":");
+        int h = Integer.parseInt(p[0]), m = Integer.parseInt(p[1]);
+        return h < 24 && m < 60 ? h * 60 + m : -1;
     }
 
     private static int integer(JSONObject o, String key, int fallback, int min, int max) {
