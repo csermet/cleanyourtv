@@ -150,6 +150,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     /** Night mode: the theme's config, and a black layer over the wallpaper at night. */
     private Config nightCfg;
     private View nightShade;
+    /** Screen on/off for the theme's wake and sleep sounds (TvSounds). */
+    private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) TvSounds.screenOn(c);
+            else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) TvSounds.screenOff(c);
+        }
+    };
     /** Header status lines (status_nodes / status_usage_url), refreshed every minute while Home is shown. */
     private TextView statusNodes, statusUsage;
     private final ServerStatus serverStatus = new ServerStatus();
@@ -306,6 +314,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         openFromTile = cfg.openFromTile;
         inputsPill = cfg.inputsPill;
         nightCfg = cfg;
+        if (cfg.sounds) {
+            IntentFilter sf = new IntentFilter(Intent.ACTION_SCREEN_ON);
+            sf.addAction(Intent.ACTION_SCREEN_OFF);
+            registerReceiver(screenReceiver, sf);
+            TvSounds.get(this);   // load now, so the first event is ready
+        }
         wallpaperShown = cfg.wallpaper;
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
         sky = findViewById(R.id.sky);
@@ -797,6 +811,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        try {
+            unregisterReceiver(screenReceiver);
+        } catch (IllegalArgumentException ignored) {
+        }
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
@@ -1539,6 +1557,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
     @Override
     public void onPlexClick(PlexClient.Item item, View from) {
+        TvSounds.launch(this);
         // The season you are in (or the film's page), looked up on the server first: a quick LAN call.
         PLEX_EXEC.execute(() -> {
             String url = plex.watchUrl(item);

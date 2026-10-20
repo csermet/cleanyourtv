@@ -107,6 +107,11 @@ final class Config {
     /** status_nodes: [{name, url}] node-exporter /metrics per server; status_usage_url: usage JSON (theme only). */
     final List<String[]> statusNodes;
     final String statusUsageUrl;
+    /** sounds: theme sounds/ (wake, sleep, launch); sound_volume 0-100 (theme only). */
+    final boolean sounds;
+    final int soundVolume;
+    /** wake_delay_s: seconds before wake.ogg, so a soundbar on ARC is listening (0-10, default 3). */
+    final int wakeDelayS;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -123,7 +128,8 @@ final class Config {
                    int ambientGlow, boolean plexRow, String plexLanIp, float rowTiles,
                    int tileGap, int titleSize, boolean parallax, boolean openFromTile,
                    boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin,
-                   List<String[]> statusNodes, String statusUsageUrl) {
+                   List<String[]> statusNodes, String statusUsageUrl, boolean sounds, int soundVolume,
+                   int wakeDelayS) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -169,6 +175,9 @@ final class Config {
         this.nightSaverMin = nightSaverMin;
         this.statusNodes = statusNodes;
         this.statusUsageUrl = statusUsageUrl;
+        this.sounds = sounds;
+        this.soundVolume = soundVolume;
+        this.wakeDelayS = wakeDelayS;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -268,7 +277,10 @@ final class Config {
                 json == null ? -1 : clock(string(json, "night_end", "")),
                 json == null ? 35 : integer(json, "night_dim", 35, 0, 90),
                 json == null ? 0 : integer(json, "night_screensaver_min", 0, 0, 60),
-                nodes(json), json == null ? "" : string(json, "status_usage_url", ""));
+                nodes(json), json == null ? "" : string(json, "status_usage_url", ""),
+                json != null && bool(json, "sounds", false),
+                json == null ? 100 : integer(json, "sound_volume", 100, 0, 100),
+                json == null ? 3 : integer(json, "wake_delay_s", 3, 0, 10));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

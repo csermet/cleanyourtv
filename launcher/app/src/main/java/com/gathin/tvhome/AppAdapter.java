@@ -340,6 +340,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                 .setComponent(e.component)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
+        TvSounds.launch(ctx);
         try {
             if (openFromTile && from != null && from.getWidth() > 0) {
                 // The app's window grows out of the tile it was opened from.
