@@ -27,6 +27,18 @@ final class WallpaperRotation {
         return list;
     }
 
+    static final String VIDEO_DIR_NAME = "videos";
+
+    /** The theme's videos/*.mp4 for live_background, sorted by file name; empty when there are none. */
+    static File[] videos(File themeDir) {
+        if (themeDir == null) return new File[0];
+        File[] list = new File(themeDir, VIDEO_DIR_NAME).listFiles(f -> f.isFile() && f.length() > 0
+                && f.getName().toLowerCase(Locale.ROOT).endsWith(".mp4"));
+        if (list == null) return new File[0];
+        Arrays.sort(list, (a, b) -> a.getName().compareTo(b.getName()));
+        return list;
+    }
+
     /** Today's picture for {@code epochDay} (LocalDate.toEpochDay), or null when there is none. */
     static File pick(File themeDir, String singleName, long epochDay) {
         return pick(themeDir, singleName, epochDay, null);

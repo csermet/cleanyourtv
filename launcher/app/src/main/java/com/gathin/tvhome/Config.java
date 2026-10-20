@@ -38,6 +38,14 @@ final class Config {
     static final String WALLPAPER_PICK = "wallpaper_pick";
     static final String WALLPAPER_PICK_DAY = "wallpaper_pick_day";
     static final String SETTINGS_NAME = "launcher_settings";
+    /** live_background: the picture alone, a video from the theme's videos/ folder, or either with an effect over it. */
+    static final int LIVE_PICTURE = 0, LIVE_VIDEO = 1, LIVE_PICTURE_EFFECT = 2, LIVE_VIDEO_EFFECT = 3;
+    /** live_effect: what the effect draws (purple electric sparks, drifting light dust, or both). */
+    static final int EFFECT_SPARKS = 0, EFFECT_DUST = 1, EFFECT_BOTH = 2;
+    /** The owner's picks in Launcher settings; like the wallpaper pick, a theme push leaves them alone. */
+    static final String LIVE_BACKGROUND = "live_background", LIVE_EFFECT = "live_effect";
+    private static final String[] LIVE_NAMES = {"picture", "video", "picture_effect", "video_effect"};
+    private static final String[] EFFECT_NAMES = {"sparks", "dust", "both"};
     private static final String THEME_REVISION_NAME = "theme_revision";
     private static final String THEME_SIGNATURE_KEY = "theme_signature";
 
@@ -118,6 +126,8 @@ final class Config {
     final boolean nightQuietSounds;
     /** sound_preroll_ms: a silent play this long before wake.ogg opens the audio path (a soundbar on ARC drops the first syllable otherwise). */
     final int soundPrerollMs;
+    /** live_background / live_effect (theme default, then the owner's pick); see LIVE_* and EFFECT_*. */
+    final int liveBackground, liveEffect;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -135,7 +145,8 @@ final class Config {
                    int tileGap, int titleSize, boolean parallax, boolean openFromTile,
                    boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin,
                    List<String[]> statusNodes, String statusUsageUrl, boolean sounds, int soundVolume,
-                   int wakeDelayS, boolean wakeWaitArc, boolean nightQuietSounds, int soundPrerollMs) {
+                   int wakeDelayS, boolean wakeWaitArc, boolean nightQuietSounds, int soundPrerollMs,
+                   int liveBackground, int liveEffect) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -187,6 +198,8 @@ final class Config {
         this.wakeWaitArc = wakeWaitArc;
         this.nightQuietSounds = nightQuietSounds;
         this.soundPrerollMs = soundPrerollMs;
+        this.liveBackground = liveBackground;
+        this.liveEffect = liveEffect;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -292,7 +305,34 @@ final class Config {
                 json == null ? 3 : integer(json, "wake_delay_s", 3, 0, 10),
                 json != null && bool(json, "wake_wait_arc", false),
                 json != null && bool(json, "night_quiet_sounds", false),
-                json == null ? 600 : integer(json, "sound_preroll_ms", 600, 0, 3000));
+                json == null ? 600 : integer(json, "sound_preroll_ms", 600, 0, 3000),
+                pick(choices, LIVE_BACKGROUND, named(json == null ? "" : string(json, LIVE_BACKGROUND, ""), LIVE_NAMES), LIVE_NAMES.length),
+                pick(choices, LIVE_EFFECT, named(json == null ? "" : string(json, LIVE_EFFECT, ""), EFFECT_NAMES), EFFECT_NAMES.length));
+    }
+
+    /** A theme value's position in names ("video" -> 1); 0, the first, for anything else. */
+    static int named(String value, String[] names) {
+        for (int i = 0; i < names.length; i++) if (names[i].equals(value)) return i;
+        return 0;
+    }
+
+    static int liveBackgroundNamed(String value) { return named(value, LIVE_NAMES); }
+
+    static int liveEffectNamed(String value) { return named(value, EFFECT_NAMES); }
+
+    private static int pick(SharedPreferences choices, String key, int fallback, int count) {
+        int v = choices.getInt(key, fallback);
+        return v >= 0 && v < count ? v : fallback;
+    }
+
+    boolean liveVideo() { return liveBackground == LIVE_VIDEO || liveBackground == LIVE_VIDEO_EFFECT; }
+
+    boolean liveEffectOn() { return liveBackground == LIVE_PICTURE_EFFECT || liveBackground == LIVE_VIDEO_EFFECT; }
+
+    /** Today's video from the theme's videos/ folder (daily, in file-name order), or null when there is none. */
+    static File currentVideo(Context ctx) {
+        File[] list = WallpaperRotation.videos(dir(ctx));
+        return list.length == 0 ? null : list[WallpaperRotation.index(java.time.LocalDate.now().toEpochDay(), list.length)];
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

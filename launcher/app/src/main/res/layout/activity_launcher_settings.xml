@@ -42,6 +42,32 @@
             <TextView android:id="@+id/wallpaperChoice" style="@style/SettingsRow" />
             <TextView android:id="@+id/wallpaperHint" style="@style/SettingsHint" android:text="@string/wallpaper_hint" />
 
+            <TextView style="@style/SettingsHeader" android:text="@string/section_live_background" />
+            <TextView style="@style/SettingsLabel" android:text="@string/live_background_label" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/livePicture" style="@style/SettingsSegment" android:text="@string/live_picture" />
+                <TextView android:id="@+id/liveVideo" style="@style/SettingsSegment" android:text="@string/live_video" />
+                <TextView android:id="@+id/livePictureEffect" style="@style/SettingsSegment" android:text="@string/live_picture_effect" />
+                <TextView android:id="@+id/liveVideoEffect" style="@style/SettingsSegment" android:text="@string/live_video_effect" />
+            </LinearLayout>
+            <TextView android:id="@+id/liveEffectLabel" style="@style/SettingsLabel"
+                android:layout_marginTop="16dp" android:text="@string/live_effect_label" />
+            <LinearLayout
+                android:id="@+id/liveEffectRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+                <TextView android:id="@+id/liveSparks" style="@style/SettingsSegment" android:text="@string/live_sparks" />
+                <TextView android:id="@+id/liveDust" style="@style/SettingsSegment" android:text="@string/live_dust" />
+                <TextView android:id="@+id/liveBoth" style="@style/SettingsSegment" android:text="@string/live_both" />
+            </LinearLayout>
+            <TextView android:id="@+id/liveHint" style="@style/SettingsHint" />
+
             <TextView android:id="@+id/plexHeader" style="@style/SettingsHeader" android:text="@string/section_plex" />
             <TextView android:id="@+id/plexChoice" style="@style/SettingsRow" />
             <TextView android:id="@+id/plexHint" style="@style/SettingsHint" android:text="@string/plex_hint" />

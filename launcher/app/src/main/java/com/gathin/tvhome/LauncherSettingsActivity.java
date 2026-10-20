@@ -24,6 +24,10 @@ public final class LauncherSettingsActivity extends Activity {
     private TextView advancedChoice;
     private TextView followThemeChoice;
     private TextView wallpaperChoice;
+    private final TextView[] liveChoices = new TextView[4];
+    private final TextView[] effectChoices = new TextView[3];
+    private int liveBackground, liveEffect;
+    private boolean hasVideos;
     private int columns;
     private boolean animations;
     private boolean advancedEffects;
@@ -113,6 +117,7 @@ public final class LauncherSettingsActivity extends Activity {
             setResult(RESULT_OK);
             Toast.makeText(this, R.string.order_reset_done, Toast.LENGTH_SHORT).show();
         });
+        setUpLiveBackground(config);
         setUpPlex();
         loadBackground();
         refresh();
@@ -156,6 +161,45 @@ public final class LauncherSettingsActivity extends Activity {
             final android.graphics.Bitmap b = bmp;
             if (b != null) runOnUiThread(() -> bg.setImageBitmap(b));
         }).start();
+    }
+
+    // ---- Live background (live_background, live_effect) --------------------------------------
+
+    /** Picture / Video / either with an effect, then which effect; Video needs the theme's videos/ folder. */
+    private void setUpLiveBackground(Config config) {
+        liveBackground = config.liveBackground;
+        liveEffect = config.liveEffect;
+        hasVideos = WallpaperRotation.videos(Config.dir(this)).length > 0;
+        int[] ids = {R.id.livePicture, R.id.liveVideo, R.id.livePictureEffect, R.id.liveVideoEffect};
+        for (int i = 0; i < ids.length; i++) {
+            final int value = i;
+            TextView v = liveChoices[i] = findViewById(ids[i]);
+            if (!hasVideos && (value == Config.LIVE_VIDEO || value == Config.LIVE_VIDEO_EFFECT)) {
+                v.setEnabled(false);
+                v.setFocusable(false);
+                v.setAlpha(0.4f);
+            }
+            v.setOnClickListener(x -> {
+                if (liveBackground == value) return;
+                liveBackground = value;
+                choices.edit().putInt(Config.LIVE_BACKGROUND, value).apply();
+                setResult(RESULT_OK);
+                refresh();
+            });
+        }
+        int[] effectIds = {R.id.liveSparks, R.id.liveDust, R.id.liveBoth};
+        for (int i = 0; i < effectIds.length; i++) {
+            final int value = i;
+            effectChoices[i] = findViewById(effectIds[i]);
+            effectChoices[i].setOnClickListener(x -> {
+                if (liveEffect == value) return;
+                liveEffect = value;
+                choices.edit().putInt(Config.LIVE_EFFECT, value).apply();
+                setResult(RESULT_OK);
+                refresh();
+            });
+        }
+        ((TextView) findViewById(R.id.liveHint)).setText(hasVideos ? R.string.live_hint : R.string.live_hint_no_video);
     }
 
     // ---- Plex (plex_row) ------------------------------------------------------------------------
@@ -239,6 +283,12 @@ public final class LauncherSettingsActivity extends Activity {
         advancedChoice.setEnabled(animations);
         advancedChoice.setAlpha(animations ? 1f : 0.5f);
         followThemeChoice.setSelected(!hasOnTvChoices());
+        for (int i = 0; i < liveChoices.length; i++) liveChoices[i].setSelected(liveBackground == i);
+        // The effect row only when the background has an effect: no row that does nothing.
+        boolean effect = liveBackground == Config.LIVE_PICTURE_EFFECT || liveBackground == Config.LIVE_VIDEO_EFFECT;
+        findViewById(R.id.liveEffectLabel).setVisibility(effect ? View.VISIBLE : View.GONE);
+        findViewById(R.id.liveEffectRow).setVisibility(effect ? View.VISIBLE : View.GONE);
+        for (int i = 0; i < effectChoices.length; i++) effectChoices[i].setSelected(liveEffect == i);
         ((TextView) findViewById(R.id.showHiddenChoice)).setText(getString(R.string.show_hidden, TileOrder.hidden(this).size()));
         if (plex != null) {
             ((TextView) findViewById(R.id.plexChoice)).setText(plex.linked()

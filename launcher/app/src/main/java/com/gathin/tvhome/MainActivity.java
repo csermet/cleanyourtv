@@ -236,6 +236,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private Festival festival = Festival.NONE;
     /** The wallpaper file on screen (null for the plain colour); see WallpaperRotation. */
     private java.io.File wallpaperShown;
+    /** live_background video over the wallpaper, or null (see LiveVideo). */
+    private LiveVideo liveVideo;
     private boolean festive;
     private DiyaDrawable diya;
     private BellDrawable bell;
@@ -356,6 +358,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         }
         wallpaperShown = cfg.wallpaper;
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
+        // live_background video: over the picture (its poster), under the night shade. Not on low-RAM TVs.
+        java.io.File video = cfg.liveVideo() && wallView != null && !isLowRam() ? Config.currentVideo(this) : null;
+        if (video != null) {
+            liveVideo = new LiveVideo(this, video, cfg.animations && !cfg.reducedMotion);
+            root.addView(liveVideo.view(), root.indexOfChild(wallView) + 1,
+                    new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         sky = findViewById(R.id.sky);
         sky.setIntensity(cfg.skyIntensity);
         glass = findViewById(R.id.glass);
@@ -728,6 +737,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             recreate();
             return;
         }
+        // The same for the day's video.
+        if (liveVideo != null && !liveVideo.file.equals(Config.currentVideo(this))) {
+            recreate();
+            return;
+        }
         promptsPaused = false;
         if (rebuildOnResume) {
             tilesReady = false;
@@ -735,6 +749,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         }
         rebuildOnResume = false;
         resumed = true;
+        if (liveVideo != null) liveVideo.start();
         if (plex != null && (plexFailed || android.os.SystemClock.elapsedRealtime() - plexLoadedAt > PLEX_REFRESH_MS)) loadPlex();
         if (statusFailed) statusAt = Long.MIN_VALUE / 2;
         updateGreeting();
@@ -834,6 +849,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         handler.removeCallbacks(statusTick);
         handler.removeCallbacks(retryFailed);
         resumed = false;
+        if (liveVideo != null) liveVideo.stop();
         if (diya != null) diya.stop();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();

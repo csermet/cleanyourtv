@@ -30,6 +30,33 @@ public class WallpaperRotationTest {
         assertEquals(single, WallpaperRotation.pick(dir, "wallpaper.jpg", 20000));
     }
 
+    @Test public void videosAreMp4sInNameOrder() throws IOException {
+        File dir = tmp.getRoot();
+        write(new File(dir, "videos/b.mp4"), 10);
+        write(new File(dir, "videos/a.MP4"), 10);
+        write(new File(dir, "videos/empty.mp4"), 0);
+        write(new File(dir, "videos/notes.txt"), 10);
+        write(new File(dir, "wallpapers/c.mp4"), 10);
+        File[] v = WallpaperRotation.videos(dir);
+        assertEquals(2, v.length);
+        assertEquals("a.MP4", v[0].getName());
+        assertEquals("b.mp4", v[1].getName());
+        assertEquals(0, WallpaperRotation.videos(null).length);
+        assertEquals(0, WallpaperRotation.videos(tmp.newFolder("bare")).length);
+    }
+
+    @Test public void liveBackgroundNames() {
+        assertEquals(Config.LIVE_PICTURE, Config.liveBackgroundNamed("picture"));
+        assertEquals(Config.LIVE_VIDEO, Config.liveBackgroundNamed("video"));
+        assertEquals(Config.LIVE_PICTURE_EFFECT, Config.liveBackgroundNamed("picture_effect"));
+        assertEquals(Config.LIVE_VIDEO_EFFECT, Config.liveBackgroundNamed("video_effect"));
+        assertEquals(Config.LIVE_PICTURE, Config.liveBackgroundNamed("VIDEO"));
+        assertEquals(Config.LIVE_PICTURE, Config.liveBackgroundNamed(""));
+        assertEquals(Config.EFFECT_DUST, Config.liveEffectNamed("dust"));
+        assertEquals(Config.EFFECT_BOTH, Config.liveEffectNamed("both"));
+        assertEquals(Config.EFFECT_SPARKS, Config.liveEffectNamed("glitter"));
+    }
+
     @Test public void nothingAtAllIsNull() {
         assertNull(WallpaperRotation.pick(tmp.getRoot(), "wallpaper.jpg", 20000));
         assertNull(WallpaperRotation.pick(null, "wallpaper.jpg", 20000));
