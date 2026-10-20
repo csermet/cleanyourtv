@@ -98,6 +98,8 @@ final class Config {
     final boolean parallax;
     /** open_from_tile: apps open growing out of their tile (ActivityOptions scale-up) (theme only). */
     final boolean openFromTile;
+    /** inputs_pill: false hides the Inputs pill (the remote's Input key still works) (theme only). */
+    final boolean inputsPill;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -112,7 +114,8 @@ final class Config {
                    File wallpaper, boolean overlayApplied, Festival festival, int textColor, boolean singleRow,
                    boolean networkPill, int topButtonsSize, int bandOpacity,
                    int ambientGlow, boolean plexRow, String plexLanIp, float rowTiles,
-                   int tileGap, int titleSize, boolean parallax, boolean openFromTile) {
+                   int tileGap, int titleSize, boolean parallax, boolean openFromTile,
+                   boolean inputsPill) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -151,6 +154,7 @@ final class Config {
         this.titleSize = titleSize;
         this.parallax = parallax;
         this.openFromTile = openFromTile;
+        this.inputsPill = inputsPill;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -244,7 +248,8 @@ final class Config {
                 json == null ? 0 : integer(json, "tile_gap", 0, 0, 40),
                 json == null ? 0 : integer(json, "title_size", 0, 0, 60),
                 json != null && bool(json, "parallax", false),
-                json != null && bool(json, "open_from_tile", false));
+                json != null && bool(json, "open_from_tile", false),
+                json == null || bool(json, "inputs_pill", true));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

@@ -146,6 +146,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     /** The row without focus is dimmed to this opacity. */
     private static final float ROW_DIM = 0.65f;
     private boolean parallax, openFromTile;
+    private boolean inputsPill = true;
     private View wallView;
     private static final float PARALLAX_X_DP = 20f, PARALLAX_Y_DP = 10f, WALL_ZOOM = 1.06f;
     private RowBandDecoration appsBand;
@@ -280,6 +281,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         // Before the wallpaper is made: parallax needs it zoomed for room to drift.
         parallax = cfg.parallax;
         openFromTile = cfg.openFromTile;
+        inputsPill = cfg.inputsPill;
         wallpaperShown = cfg.wallpaper;
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
         sky = findViewById(R.id.sky);
@@ -495,7 +497,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
-        if (advancedEffects) {
+        if (advancedEffects || singleRow) {
             for (View button : new View[]{btnInputs, btnWifi, btnSettings}) {
                 button.setOnFocusChangeListener((view, focused) -> view.animate()
                         .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
@@ -1658,6 +1660,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
     private void updateInputsButton() {
+        if (!inputsPill) {
+            btnInputs.setVisibility(View.GONE);
+            return;
+        }
         boolean any = liveTvIntent() != null || !sourcePanelService.isEmpty();
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (!any && tim != null) {
