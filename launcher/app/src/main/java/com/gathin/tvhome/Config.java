@@ -104,6 +104,9 @@ final class Config {
     final int nightStart, nightEnd;
     /** night_dim: extra darkening of the wallpaper at night in percent; night_screensaver_min: screensaver delay at night. */
     final int nightDim, nightSaverMin;
+    /** status_nodes: [{name, url}] node-exporter /metrics per server; status_usage_url: usage JSON (theme only). */
+    final List<String[]> statusNodes;
+    final String statusUsageUrl;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -119,7 +122,8 @@ final class Config {
                    boolean networkPill, int topButtonsSize, int bandOpacity,
                    int ambientGlow, boolean plexRow, String plexLanIp, float rowTiles,
                    int tileGap, int titleSize, boolean parallax, boolean openFromTile,
-                   boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin) {
+                   boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin,
+                   List<String[]> statusNodes, String statusUsageUrl) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -163,6 +167,8 @@ final class Config {
         this.nightEnd = nightEnd;
         this.nightDim = nightDim;
         this.nightSaverMin = nightSaverMin;
+        this.statusNodes = statusNodes;
+        this.statusUsageUrl = statusUsageUrl;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -261,7 +267,8 @@ final class Config {
                 json == null ? -1 : clock(string(json, "night_start", "")),
                 json == null ? -1 : clock(string(json, "night_end", "")),
                 json == null ? 35 : integer(json, "night_dim", 35, 0, 90),
-                json == null ? 0 : integer(json, "night_screensaver_min", 0, 0, 60));
+                json == null ? 0 : integer(json, "night_screensaver_min", 0, 0, 60),
+                nodes(json), json == null ? "" : string(json, "status_usage_url", ""));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */
@@ -337,6 +344,19 @@ final class Config {
     private static boolean bool(JSONObject o, String key, boolean fallback) {
         Object v = o.opt(key);
         return v instanceof Boolean ? (Boolean) v : fallback;
+    }
+
+    private static List<String[]> nodes(JSONObject json) {
+        List<String[]> out = new ArrayList<>();
+        JSONArray a = json == null ? null : json.optJSONArray("status_nodes");
+        if (a == null) return out;
+        for (int i = 0; i < a.length(); i++) {
+            JSONObject o = a.optJSONObject(i);
+            if (o == null) continue;
+            String name = o.optString("name", ""), url = o.optString("url", "");
+            if (!name.isEmpty() && url.startsWith("http")) out.add(new String[]{name, url});
+        }
+        return out;
     }
 
     /** "HH:MM" as minutes of the day, or -1 when it does not parse. */

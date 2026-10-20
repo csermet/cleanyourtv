@@ -150,6 +150,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     /** Night mode: the theme's config, and a black layer over the wallpaper at night. */
     private Config nightCfg;
     private View nightShade;
+    /** Header status lines (status_nodes / status_usage_url), refreshed every minute while Home is shown. */
+    private TextView statusNodes, statusUsage;
+    private final ServerStatus serverStatus = new ServerStatus();
+    private static final java.util.concurrent.ExecutorService STATUS_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private final Runnable statusTick = new Runnable() {
+        @Override
+        public void run() {
+            refreshStatus();
+            handler.postDelayed(this, 60_000L);
+        }
+    };
     private View wallView;
     private static final float PARALLAX_X_DP = 20f, PARALLAX_Y_DP = 10f, WALL_ZOOM = 1.06f;
     private RowBandDecoration appsBand;
@@ -318,6 +329,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
         grid = findViewById(R.id.grid);
         singleRow = cfg.singleRow;
+        pendingHeaderCfg = cfg;
         if (singleRow) styleHeroForRow(cfg.titleSize);
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
@@ -667,6 +679,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         NightMode.apply(this, nightCfg);
         sky.update();
         handler.postDelayed(minuteTick, MINUTE_MS);
+        handler.removeCallbacks(statusTick);
+        handler.post(statusTick);
         if (festive && diya != null) {
             diya.start();
             LocalDate today = LocalDate.now();
@@ -752,6 +766,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         heroName.animate().cancel();
         ambient.animate().cancel();
         handler.removeCallbacks(minuteTick);
+        handler.removeCallbacks(statusTick);
         if (diya != null) diya.stop();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
@@ -1095,6 +1110,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         hp.setMarginEnd((int) (-24 * density));
         hp.topMargin = (int) (-12 * density);
         header.setLayoutParams(hp);
+        rebuildHeader(nightCfgOrNull());
         // The pills sit at the top-right corner instead of on the date line.
         View bar = findViewById(R.id.topButtons);
         android.widget.RelativeLayout.LayoutParams blp = (android.widget.RelativeLayout.LayoutParams) bar.getLayoutParams();
@@ -1130,6 +1146,81 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             heroName.setLayoutParams(lp);
         }
         heroAligned = true;
+    }
+
+    private Config pendingHeaderCfg;
+    private Config nightCfgOrNull() { return pendingHeaderCfg; }
+
+    /**
+     * single_row: the date moves under the clock ("20 October Tuesday"), then a thin line, then the
+     * status lines when the theme names servers or a usage endpoint.
+     */
+    private void rebuildHeader(Config cfg) {
+        TextView clock = findViewById(R.id.clock);
+        ViewGroup row = (ViewGroup) clock.getParent();
+        ViewGroup left = (ViewGroup) row.getParent();
+        TextView date = findViewById(R.id.date);
+        View dateCol = (View) date.getParent();
+        for (int i = 0; i < row.getChildCount(); i++) {
+            View v = row.getChildAt(i);
+            if (v != clock && v.getId() != R.id.ampm && v != dateCol) v.setVisibility(View.GONE);   // the vertical rule
+        }
+        row.removeView(dateCol);
+        int at = left.indexOfChild(row) + 1;
+        LinearLayout.LayoutParams dlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dlp.setMarginStart((int) (2 * density));
+        left.addView(dateCol, at++, dlp);
+        dateCol.setPadding(0, 0, 0, 0);
+        if (date instanceof android.widget.TextClock) {
+            ((android.widget.TextClock) date).setFormat12Hour("d MMMM EEEE");
+            ((android.widget.TextClock) date).setFormat24Hour("d MMMM EEEE");
+        }
+        date.setAllCaps(false);
+        date.setTextSize(16f);
+        boolean status = cfg != null && (!cfg.statusNodes.isEmpty() || !cfg.statusUsageUrl.isEmpty());
+        if (!status) return;
+        View rule = new View(this);
+        rule.setBackgroundColor(0x40FFFFFF);
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams((int) (360 * density), Math.max(1, (int) density));
+        rlp.topMargin = (int) (10 * density);
+        rlp.bottomMargin = (int) (8 * density);
+        rlp.setMarginStart((int) (2 * density));
+        left.addView(rule, at++, rlp);
+        statusNodes = statusLine();
+        statusUsage = statusLine();
+        left.addView(statusNodes, at++);
+        left.addView(statusUsage, at);
+    }
+
+    private TextView statusLine() {
+        TextView v = new TextView(this);
+        v.setTextSize(13f);
+        v.setTextColor(0xCCFFFFFF);
+        v.setTypeface(androidx.core.content.res.ResourcesCompat.getFont(this, R.font.outfit_regular));
+        v.setSingleLine(true);
+        v.setPadding((int) (2 * density), (int) (2 * density), 0, (int) (2 * density));
+        v.setShadowLayer(3f * density, 0f, 0f, 0xCC000000);
+        return v;
+    }
+
+    /** Reads the servers and the usage endpoint off the main thread; CPU needs a second read 3 s later at first. */
+    private void refreshStatus() {
+        Config cfg = nightCfg;
+        if (cfg == null || (statusNodes == null && statusUsage == null)) return;
+        STATUS_EXEC.execute(() -> {
+            boolean primed = cfg.statusNodes.isEmpty();
+            String nodes = cfg.statusNodes.isEmpty() ? "" : serverStatus.nodesLine(cfg.statusNodes);
+            if (nodes.contains("…")) {
+                try { Thread.sleep(3000); } catch (InterruptedException e) { return; }
+                nodes = serverStatus.nodesLine(cfg.statusNodes);
+            }
+            String usage = cfg.statusUsageUrl.isEmpty() ? "" : ServerStatus.usageLine(cfg.statusUsageUrl);
+            final String n = nodes, u = usage;
+            runOnUiThread(() -> {
+                if (statusNodes != null) { statusNodes.setText(n); statusNodes.setVisibility(n.isEmpty() ? View.GONE : View.VISIBLE); }
+                if (statusUsage != null) { statusUsage.setText(u); statusUsage.setVisibility(u.isEmpty() ? View.GONE : View.VISIBLE); }
+            });
+        });
     }
 
     /** Long Plex titles shrink (down to 24sp) to fit the screen instead of ending in an ellipsis. */
