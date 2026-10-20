@@ -62,6 +62,10 @@ final class PlexRowAdapter extends RecyclerView.Adapter<PlexRowAdapter.Holder> {
 
     int cardHeight() { return cardHeight; }
 
+    PlexClient.Item itemAt(int position) {
+        return position >= 0 && position < items.size() ? items.get(position) : null;
+    }
+
     @Override
     public long getItemId(int position) { return items.get(position).ratingKey.hashCode(); }
 

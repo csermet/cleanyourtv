@@ -123,6 +123,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private float glassScrollShiftX;
     /** Config.singleRow: one horizontal row, no grid. */
     private boolean singleRow;
+    /** Where the top shelf title last sat, so a Plex card can show its title in the same place. */
+    private float heroY = Float.NaN;
     /** Config.plexRow: the Plex recommended row under the single row; null when off. */
     private RecyclerView plexRow;
     private PlexRowAdapter plexAdapter;
@@ -277,6 +279,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
         grid = findViewById(R.id.grid);
         singleRow = cfg.singleRow;
+        if (singleRow) styleHeroForRow();
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         if (singleRow) {
@@ -795,7 +798,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private void showHero(int position, float dockTopInRoot) {
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
-        float y = dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
+        float y = singleRow ? dockTopInRoot - 12 * density - heroName.getHeight()
+                : dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
+        heroY = y;
         boolean changed = !label.contentEquals(heroName.getText());
 
         if (!animations || reducedMotion) {
@@ -995,6 +1000,41 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
     // ---- Plex recommended row (single_row + plex_row) --------------------------------------------
 
+    /** single_row: the title gets a soft black edge and a faint panel, so it reads over any wallpaper. */
+    private void styleHeroForRow() {
+        heroName.setShadowLayer(3f * density, 0f, 0f, 0xE6000000);
+        android.graphics.drawable.GradientDrawable panel = new android.graphics.drawable.GradientDrawable();
+        panel.setColor(0x1AFFFFFF);
+        panel.setCornerRadius(10 * density);
+        heroName.setBackground(panel);
+        int ph = (int) (14 * density), pv = (int) (4 * density);
+        heroName.setPadding(ph, pv, ph, pv + (int) (2 * density));
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) heroName.getLayoutParams();
+        lp.setMarginStart(Math.max(0, lp.getMarginStart() - ph));
+        heroName.setLayoutParams(lp);
+    }
+
+    /** The top shelf title for a Plex card, where the app titles sit. */
+    private void showHeroText(String label) {
+        if (Float.isNaN(heroY)) return;
+        heroName.animate().cancel();
+        if (!heroShown || !animations || reducedMotion) {
+            heroName.setText(label);
+            heroName.setY(heroY);
+            heroName.setTranslationX(0f);
+            if (animations) heroName.animate().alpha(1f).setDuration(200).start();
+            else heroName.setAlpha(1f);
+        } else if (!label.contentEquals(heroName.getText())) {
+            heroName.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
+                heroName.setText(label);
+                heroName.setY(heroY);
+                heroName.setTranslationX(12 * density);
+                heroName.animate().alpha(1f).translationX(0f).setDuration(200).start();
+            }).start();
+        }
+        heroShown = true;
+    }
+
     private void setUpPlexRow(int bandOpacity) {
         plex = new PlexClient(this);
         plexAdapter = new PlexRowAdapter(plex, this);
@@ -1005,15 +1045,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         plexRow.setOverScrollMode(View.OVER_SCROLL_NEVER);
         plexRow.addItemDecoration(new RowBandDecoration(density, bandOpacity));
         int side = (int) (28 * density);
-        plexRow.setPadding(side, (int) (8 * density), side, (int) (18 * density));
+        plexRow.setPadding(side, (int) (8 * density), side, (int) (16 * density));
         plexRow.setClipToPadding(true);
         plexRow.setVisibility(View.GONE);
         ViewGroup wrap = (ViewGroup) grid.getParent();
         wrap.addView(plexRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
         wrap.post(() -> {
-            // About five and a half cards on screen: the cut-off one says the row scrolls on.
-            plexAdapter.setSize(wrap.getWidth() - 2 * side, 5.5f, density);
+            // About six cards on screen: the cut-off one says the row scrolls on.
+            plexAdapter.setSize(wrap.getWidth() - 2 * side, 6.2f, density);
             loadPlex();
         });
     }
@@ -1103,7 +1143,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     public void onPlexFocused(int position) {
         plexLast = position;
         hideGlass();
-        hideHero();
+        PlexClient.Item it = plexAdapter.itemAt(position);
+        if (it == null) {
+            hideHero();
+            return;
+        }
+        showHeroText(it.subtitle.isEmpty() ? it.title : it.title + "  ·  " + it.subtitle);
     }
 
     @Override
