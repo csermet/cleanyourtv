@@ -74,6 +74,14 @@ final class Config {
     final File wallpaper;
     /** Header text colour (clock, greeting, date, focused app name) from a theme's text_color, or 0 for the built-in white. */
     final int textColor;
+    /** single_row: every app in one horizontal row that scrolls; no grid below (theme only). */
+    final boolean singleRow;
+    /** network_pill: false hides the Wi-Fi/Ethernet pill in the top bar (theme only). */
+    final boolean networkPill;
+    /** top_buttons_size: the top bar pills' size in percent, 60 to 100 (theme only). */
+    final int topButtonsSize;
+    /** band_opacity: single_row band opacity in percent, 20 to 100 (theme only). */
+    final int bandOpacity;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -85,7 +93,8 @@ final class Config {
                    boolean shamsiDate, boolean moduleCards, boolean reducedMotion, String vpnApp,
                    boolean showHomeSettingsShortcut, int backgroundColor, int skyIntensity,
                    int[] settingsKeycodes, boolean settingsKeyPanel, Map<Integer, String> appKeys,
-                   File wallpaper, boolean overlayApplied, Festival festival, int textColor) {
+                   File wallpaper, boolean overlayApplied, Festival festival, int textColor, boolean singleRow,
+                   boolean networkPill, int topButtonsSize, int bandOpacity) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -112,6 +121,10 @@ final class Config {
         this.overlayApplied = overlayApplied;
         this.festival = festival;
         this.textColor = textColor;
+        this.singleRow = singleRow;
+        this.networkPill = networkPill;
+        this.topButtonsSize = topButtonsSize;
+        this.bandOpacity = bandOpacity;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -193,7 +206,11 @@ final class Config {
                 Math.max(1, columns), Math.max(0, rowsBelow), animations, advancedEffects,
                 shamsi, moduleCards, reducedMotion, vpn, homeSettings, background,
                 Math.max(0, Math.min(100, skyIntensity)), settingsKeycodes, settingsKeyPanel, appKeys, wallpaper, applied,
-                festival, json == null ? 0 : color(json, "text_color", 0));
+                festival, json == null ? 0 : color(json, "text_color", 0),
+                json != null && bool(json, "single_row", false),
+                json == null || bool(json, "network_pill", true),
+                json == null ? 100 : integer(json, "top_buttons_size", 100, 60, 100),
+                json == null ? 100 : integer(json, "band_opacity", 100, 20, 100));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

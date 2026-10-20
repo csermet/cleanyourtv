@@ -61,6 +61,7 @@ import androidx.dynamicanimation.animation.FloatPropertyCompat;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
@@ -115,6 +116,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // How far the grid has scrolled the glass. springY works without it, in grid content space, so a
     // scroll moves the glass in lockstep with its tile instead of becoming a moving spring target.
     private float glassScrollShift;
+    /** Horizontal counterpart of glassScrollShift, for single_row. */
+    private float glassScrollShiftX;
+    /** Config.singleRow: one horizontal row, no grid. */
+    private boolean singleRow;
     private boolean glassShown;
     // Static so they survive the activity being destroyed while another app is open (low-memory TVs,
     // or Developer options → "Don't keep activities"); they only reset when the process dies.
@@ -256,9 +261,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         hiddenApps = new HashSet<>(cfg.hiddenApps);
 
         grid = findViewById(R.id.grid);
+        singleRow = cfg.singleRow;
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
-        grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
+        if (singleRow) {
+            // Every app in one row that scrolls sideways; the wrapper clips the tiles at the row's ends.
+            grid.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, rtlAppGrid));
+            // Sit on the bottom edge at the row's own height. The grid's trick of pushing the dock down
+            // with top padding re-lays only some children of a horizontal list, leaving the rest stranded.
+            FrameLayout.LayoutParams glp = (FrameLayout.LayoutParams) grid.getLayoutParams();
+            glp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            glp.gravity = android.view.Gravity.BOTTOM;
+            grid.setLayoutParams(glp);
+            // Inset the tiles from the band's ends so the first and last focus have room, and clip them
+            // there as they scroll; the band itself is drawn before the children, into the padding.
+            int side = (int) (28 * density);
+            grid.setPadding(side, grid.getPaddingTop(), side, grid.getPaddingBottom());
+            grid.setClipToPadding(true);
+        } else grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
             @Override
             protected boolean isLayoutRTL() {
                 return rtlAppGrid;
@@ -293,7 +313,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
-        grid.addItemDecoration(new DockDecoration(COLUMNS, density));
+        grid.addItemDecoration(singleRow ? new RowBandDecoration(density, cfg.bandOpacity) : new DockDecoration(COLUMNS, density));
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
@@ -305,8 +325,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
-        int rowsBelowDock = cfg.rowsBelowDock;
-        grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+        int rowsBelowDock = singleRow ? 0 : cfg.rowsBelowDock;
+        if (!singleRow) grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             int h = b - t;
             // Item height follows the tile size, which follows the column count (AppAdapter.tileWidthPx).
             int inner = (r - l) - grid.getPaddingLeft() - grid.getPaddingRight();
@@ -326,12 +346,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 if (!glassShown) return;
                 glassTargetY -= dy;
                 glassScrollShift -= dy;
+                glassTargetX -= dx;
+                glassScrollShiftX -= dx;
+                glass.setTranslationX(glass.getTranslationX() - dx);
                 glass.setTranslationY(glass.getTranslationY() - dy);
             }
         });
 
         // Liquid feel: soft springs on the highlight's position.
-        springX = new SpringAnimation(glass, DynamicAnimation.TRANSLATION_X);
+        springX = new SpringAnimation(glass, new FloatPropertyCompat<View>("glassContentX") {
+            @Override
+            public float getValue(View v) {
+                return v.getTranslationX() - glassScrollShiftX;
+            }
+
+            @Override
+            public void setValue(View v, float value) {
+                v.setTranslationX(value + glassScrollShiftX);
+            }
+        });
         springY = new SpringAnimation(glass, new FloatPropertyCompat<View>("glassContentY") {
             @Override
             public float getValue(View v) {
@@ -357,6 +390,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
+        if (!cfg.networkPill) btnWifi.setVisibility(View.GONE);
+        if (cfg.topButtonsSize < 100) {
+            // Smaller pills, anchored at the top bar's end so they keep their place in the corner.
+            View bar = findViewById(R.id.topButtons);
+            float s = cfg.topButtonsSize / 100f;
+            bar.addOnLayoutChangeListener((v, l, tp, r, b, ol, ot, or, ob) -> {
+                v.setPivotX(v.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL ? 0 : r - l);
+                v.setPivotY(b - tp);
+            });
+            bar.setScaleX(s);
+            bar.setScaleY(s);
+        }
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnWifi.setOnLongClickListener(v -> {
@@ -377,10 +422,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
-                focusTile(lastFocused % COLUMNS);
+                focusTile(singleRow ? lastFocused : lastFocused % COLUMNS);
                 return true;
             }
-            int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs : R.id.btnWifi;
+            int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs
+                    : btnWifi.getVisibility() == View.VISIBLE ? R.id.btnWifi : R.id.btnSettings;
             int leftButton = rtlMenuBar ? R.id.btnSettings : firstButton;
             int rightButton = rtlMenuBar ? firstButton : R.id.btnSettings;
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == leftButton;
@@ -702,11 +748,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             glass.setTranslationX(x);
             glass.setTranslationY(y);
         } else {
-            springX.animateToFinalPosition(x);
+            springX.animateToFinalPosition(x - glassScrollShiftX);
             springY.animateToFinalPosition(y - glassScrollShift);
         }
         View item = (View) card.getParent();
-        if (position < COLUMNS) {
+        if (adapter.inDock(position)) {
             // Dock: park it at the bottom of the screen and show the top shelf for this app.
             int decoratedTop = item.getTop() - (int) (6 * density);
             int dy = decoratedTop - grid.getPaddingTop();
@@ -869,6 +915,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.getItemCount();
         int target;
+        if (singleRow) {
+            // One row: Left/Right stop at its ends, Up goes to the top bar, Down goes nowhere.
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                return GridNavigation.atHorizontalEdge(position, count, Math.max(1, count),
+                        rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
+            }
+            return keyCode != KeyEvent.KEYCODE_DPAD_UP;
+        }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
         // escapes up into the top bar. Mid-row moves fall through to the default focus search.
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
@@ -894,7 +948,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private void focusTile(int position) {
         if (adapter.getItemCount() == 0) {
-            btnWifi.requestFocus();
+            (btnWifi.getVisibility() == View.VISIBLE ? btnWifi : findViewById(R.id.btnSettings)).requestFocus();
             return;
         }
         final int pos = adapter.focusablePosition(Math.max(0, Math.min(position, adapter.getItemCount() - 1)));

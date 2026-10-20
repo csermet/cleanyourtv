@@ -112,6 +112,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private final Context ctx;
     private final TileListener listener;
     private final int dockSize;
+    /** Config.singleRow: the whole list is one dock row (no labels, no empty slots, fixed cell width). */
+    private final boolean singleRow;
     /** Dock order (config.xml dock_apps, or a theme's config.json). */
     private final List<String> favourites;
     /** Grid apps fill the dock slots dock_apps leaves free (config.xml, fill_dock). */
@@ -131,6 +133,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         this.ctx = ctx;
         this.listener = listener;
         this.dockSize = dockSize;
+        this.singleRow = cfg.singleRow;
         this.favourites = cfg.dockApps;
         this.fillDock = cfg.fillDock;
         this.hidden = new HashSet<>(cfg.hiddenApps);
@@ -192,7 +195,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         }
         docked = 0;
         while (docked < fresh.size() && favourites.contains(fresh.get(docked).pkg)) docked++;
-        emptySlots = DockSlots.empty(docked, dockSize, fresh.size(), fillDock);
+        emptySlots = singleRow ? 0 : DockSlots.empty(docked, dockSize, fresh.size(), fillDock);
         for (int i = 0; i < emptySlots; i++) {
             fresh.add(docked + i, new Entry(Entry.EMPTY, "", new ComponentName(ctx, "empty-dock-slot-" + i),
                     null, null, null, 0));
@@ -225,6 +228,12 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
         int inner = width - parent.getPaddingLeft() - parent.getPaddingRight();
         int w = tileWidthPx(inner, dockSize, density), h = tileHeightPx(w);
+        if (singleRow && inner > 0) {
+            // A horizontal list gives each item the row's full width otherwise: one cell per column.
+            ViewGroup.LayoutParams lp = v.getLayoutParams();
+            lp.width = inner / dockSize;
+            v.setLayoutParams(lp);
+        }
         View card = v.findViewById(R.id.card);
         ViewGroup.LayoutParams cardLp = card.getLayoutParams();
         cardLp.width = w;
@@ -255,7 +264,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         h.card.setVisibility(View.VISIBLE);
         h.card.setFocusable(true);
         h.name.setText(e.name);
-        h.name.setVisibility(position < dockSize ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
+        h.name.setVisibility(inDock(position) ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
         h.name.setAlpha(focused ? 1f : 0f);
         h.card.setScaleX(focused && animations ? focusScale() : 1f);
@@ -334,8 +343,14 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         return -1;
     }
 
+    /** Whether a position belongs to the dock row (every position in single_row). */
+    boolean inDock(int position) {
+        return singleRow || position < dockSize;
+    }
+
     /** Dock slots that hold an app: the whole dock unless some slots are empty. */
     int dockFilled() {
+        if (singleRow) return items.size();
         return emptySlots > 0 ? docked : dockSize;
     }
 
