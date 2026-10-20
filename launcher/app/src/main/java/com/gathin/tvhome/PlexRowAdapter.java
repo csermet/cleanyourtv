@@ -23,7 +23,7 @@ import java.util.concurrent.Executors;
 final class PlexRowAdapter extends RecyclerView.Adapter<PlexRowAdapter.Holder> {
 
     interface Listener {
-        void onPlexClick(PlexClient.Item item);
+        void onPlexClick(PlexClient.Item item, View from);
         void onPlexFocused(int position);
         /** D-pad on a card; return true when handled. */
         boolean onPlexKey(int position, int keyCode);
@@ -93,7 +93,7 @@ final class PlexRowAdapter extends RecyclerView.Adapter<PlexRowAdapter.Holder> {
         h.title.setText(it.title);
         h.subtitle.setText(it.subtitle);
         h.subtitle.setVisibility(it.subtitle.isEmpty() ? View.GONE : View.VISIBLE);
-        h.card.setOnClickListener(v -> listener.onPlexClick(it));
+        h.card.setOnClickListener(v -> listener.onPlexClick(it, v));
         h.card.setOnFocusChangeListener((v, focused) -> {
             v.animate().scaleX(focused ? 1.08f : 1f).scaleY(focused ? 1.08f : 1f).setDuration(150).start();
             int pos = h.getBindingAdapterPosition();

@@ -94,6 +94,10 @@ final class Config {
     final int tileGap;
     /** title_size: the top shelf title in sp (20 to 60); 0 keeps the layout's size. */
     final int titleSize;
+    /** parallax: the wallpaper drifts a little (bounded) with the focus (theme only). */
+    final boolean parallax;
+    /** open_from_tile: apps open growing out of their tile (ActivityOptions scale-up) (theme only). */
+    final boolean openFromTile;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -108,7 +112,7 @@ final class Config {
                    File wallpaper, boolean overlayApplied, Festival festival, int textColor, boolean singleRow,
                    boolean networkPill, int topButtonsSize, int bandOpacity,
                    int ambientGlow, boolean plexRow, String plexLanIp, float rowTiles,
-                   int tileGap, int titleSize) {
+                   int tileGap, int titleSize, boolean parallax, boolean openFromTile) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -145,6 +149,8 @@ final class Config {
         this.rowTiles = rowTiles;
         this.tileGap = tileGap;
         this.titleSize = titleSize;
+        this.parallax = parallax;
+        this.openFromTile = openFromTile;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -236,7 +242,9 @@ final class Config {
                 json == null ? "" : string(json, "plex_lan_ip", ""),
                 json == null ? 0f : (float) Math.max(0, Math.min(10, json.optDouble("row_tiles", 0))),
                 json == null ? 0 : integer(json, "tile_gap", 0, 0, 40),
-                json == null ? 0 : integer(json, "title_size", 0, 0, 60));
+                json == null ? 0 : integer(json, "title_size", 0, 0, 60),
+                json != null && bool(json, "parallax", false),
+                json != null && bool(json, "open_from_tile", false));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

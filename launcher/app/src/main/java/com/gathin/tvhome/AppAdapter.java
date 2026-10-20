@@ -121,6 +121,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private final float rowTiles;
     /** Config.tileGap (single_row): fixed space between tiles in dp; the focus zoom may then touch a neighbour. */
     private final int tileGapDp;
+    private final boolean openFromTile;
     /** single_row: the row's inner width when the first tiles were made; the row may later be laid out wider. */
     private int fixedInner;
     /** Dock order (config.xml dock_apps, or a theme's config.json). */
@@ -145,6 +146,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         this.singleRow = cfg.singleRow;
         this.rowTiles = cfg.rowTiles >= 3 ? cfg.rowTiles : 0f;
         this.tileGapDp = cfg.tileGap >= 4 ? cfg.tileGap : 0;
+        this.openFromTile = cfg.openFromTile;
         this.favourites = cfg.dockApps;
         this.fillDock = cfg.fillDock;
         this.hidden = new HashSet<>(cfg.hiddenApps);
@@ -313,7 +315,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             h.label.setText(e.label);
             h.label.setVisibility(View.VISIBLE);
         }
-        h.card.setOnClickListener(v -> launch(e));
+        h.card.setOnClickListener(v -> launch(e, v));
         h.card.setOnLongClickListener(v -> {
             int pos = h.getBindingAdapterPosition();
             if (listener != null && pos != RecyclerView.NO_POSITION && listener.onTileMenu(pos)) return true;
@@ -328,7 +330,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     }
 
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
-    private void launch(Entry e) {
+    private void launch(Entry e, View from) {
         if (e.kind == Entry.HOME_SETTINGS) {
             ctx.startActivity(new Intent(ctx, HomeSettingsActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -339,6 +341,12 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 .setComponent(e.component)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
         try {
+            if (openFromTile && from != null && from.getWidth() > 0) {
+                // The app's window grows out of the tile it was opened from.
+                ctx.startActivity(i, android.app.ActivityOptions.makeScaleUpAnimation(
+                        from, 0, 0, from.getWidth(), from.getHeight()).toBundle());
+                return;
+            }
             ctx.startActivity(i);
             if (advancedEffects && ctx instanceof Activity) {
                 ((Activity) ctx).overridePendingTransition(R.anim.app_open_enter, R.anim.app_open_exit);

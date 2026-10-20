@@ -139,7 +139,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private static final float ROW_SIDE_DP = 22f;
     private static final float ROW_GAP_DP = 12f, PLEX_INNER_TOP_DP = 10f, APPS_INNER_BOTTOM_DP = 80f;
     private boolean plexFocused;
-    private ValueAnimator rowAnim;
+    /** 0 = app row focused, 1 = Plex row focused; a spring moves it between the two. */
+    private final androidx.dynamicanimation.animation.FloatValueHolder rowProgress =
+            new androidx.dynamicanimation.animation.FloatValueHolder(0f);
+    private SpringAnimation rowSpring;
+    /** The row without focus is dimmed to this opacity. */
+    private static final float ROW_DIM = 0.65f;
+    private boolean parallax, openFromTile;
+    private View wallView;
+    private static final float PARALLAX_X_DP = 20f, PARALLAX_Y_DP = 10f, WALL_ZOOM = 1.06f;
     private RowBandDecoration appsBand;
     private RowBands bands;
     /** The rows' normal width (the wrapper's); a shrunk row is laid out wider so its tiles still reach the band's end. */
@@ -269,6 +277,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
         root = findViewById(R.id.root);
         root.setBackgroundColor(cfg.backgroundColor);
+        // Before the wallpaper is made: parallax needs it zoomed for room to drift.
+        parallax = cfg.parallax;
+        openFromTile = cfg.openFromTile;
         wallpaperShown = cfg.wallpaper;
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
         sky = findViewById(R.id.sky);
@@ -580,6 +591,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             wall.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
             wall.setImageBitmap(bmp);
             root.addView(wall, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            wallView = wall;
+            if (parallax) {
+                // A little larger than the screen: the drift stays inside this margin, so no edge ever shows.
+                wall.setScaleX(WALL_ZOOM);
+                wall.setScaleY(WALL_ZOOM);
+            }
         } catch (Exception | OutOfMemoryError e) {
             // A bad or huge picture must never take the home screen down; the plain colour stays.
         }
@@ -764,6 +781,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     public void onTileFocused(int position, View card) {
         lastFocused = position;
         setRowFocus(false);
+        updateParallax();
         lastFocusedKey = adapter.keyAt(position);
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
         Rect r = new Rect(0, 0, card.getWidth(), card.getHeight());
@@ -1211,6 +1229,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             plexRow.setVisibility(View.GONE);
             setRowWide(grid, false);
             applyRows(1f, 1f);
+            grid.setAlpha(1f);
             glp.bottomMargin = 0;
             grid.setLayoutParams(glp);
             return;
@@ -1226,7 +1245,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             grid.post(() -> grid.post(() -> {
                 setRowWide(plexFocused ? grid : plexRow, true);
                 setRowWide(plexFocused ? plexRow : grid, false);
-                applyRows(plexFocused ? ROW_SMALL : 1f, plexFocused ? 1f : ROW_SMALL);
+                rowProgress.setValue(plexFocused ? 1f : 0f);
+                applyProgress(plexFocused ? 1f : 0f);
                 if (grid.hasFocus()) focusTile(lastFocused);
             }));
         });
@@ -1267,34 +1287,62 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private void setRowFocus(boolean plex) {
         if (plexRow == null || plexRow.getVisibility() != View.VISIBLE || plex == plexFocused) return;
         plexFocused = plex;
-        float fromA = grid.getScaleY(), fromP = plexRow.getScaleY();
-        float toA = plex ? ROW_SMALL : 1f, toP = plex ? 1f : ROW_SMALL;
-        if (rowAnim != null) rowAnim.cancel();
         setRowWide(plex ? grid : plexRow, true);
+        float target = plex ? 1f : 0f;
         if (!animations || reducedMotion) {
-            applyRows(toA, toP);
+            if (rowSpring != null) rowSpring.cancel();
+            rowProgress.setValue(target);
+            applyProgress(target);
             setRowWide(plex ? plexRow : grid, false);
             if (!plex) focusTile(lastFocused);
             return;
         }
-        rowAnim = ValueAnimator.ofFloat(0f, 1f);
-        rowAnim.setDuration(220);
-        rowAnim.setInterpolator(new android.view.animation.DecelerateInterpolator());
-        rowAnim.addUpdateListener(a -> {
-            float f = (float) a.getAnimatedValue();
-            applyRows(fromA + (toA - fromA) * f, fromP + (toP - fromP) * f);
-        });
-        rowAnim.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(android.animation.Animator animation) {
-                if (rowAnim != animation) return;
-                rowAnim = null;
+        if (rowSpring == null) {
+            // A soft spring like the highlight's: the rows overshoot a touch and settle.
+            rowSpring = new SpringAnimation(rowProgress);
+            rowSpring.setSpring(new SpringForce().setStiffness(420f).setDampingRatio(0.78f));
+            rowSpring.setMinimumVisibleChange(0.002f);
+            rowSpring.addUpdateListener((anim, value, velocity) -> applyProgress(value));
+            rowSpring.addEndListener((anim, canceled, value, velocity) -> {
+                if (canceled) return;
                 setRowWide(plexFocused ? plexRow : grid, false);
                 // Snap the highlight onto the full-size tile once the row has settled.
                 if (!plexFocused && grid.hasFocus()) focusTile(lastFocused);
-            }
-        });
-        rowAnim.start();
+            });
+        }
+        rowSpring.animateToFinalPosition(target);
+    }
+
+    /** Both rows' scale and opacity for a progress between app row (0) and Plex row (1). */
+    private void applyProgress(float p) {
+        float sa = 1f - (1f - ROW_SMALL) * p, sp = ROW_SMALL + (1f - ROW_SMALL) * p;
+        applyRows(Math.max(ROW_SMALL * 0.97f, sa), Math.max(ROW_SMALL * 0.97f, sp));
+        float q = Math.max(0f, Math.min(1f, p));
+        grid.setAlpha(1f - (1f - ROW_DIM) * q);
+        if (plexRow != null) plexRow.setAlpha(ROW_DIM + (1f - ROW_DIM) * q);
+    }
+
+    /** The wallpaper drifts against the focus, bounded by the zoom margin: never past an edge. */
+    private void updateParallax() {
+        if (!parallax || wallView == null) return;
+        int pos, n;
+        if (plexFocused && plexAdapter != null) {
+            pos = plexLast;
+            n = plexAdapter.getItemCount();
+        } else {
+            pos = lastFocused;
+            n = adapter.getItemCount();
+        }
+        float frac = n > 1 ? Math.max(0f, Math.min(1f, pos / (float) (n - 1))) : 0.5f;
+        float tx = (0.5f - frac) * 2f * PARALLAX_X_DP * density;
+        float ty = plexFocused ? -PARALLAX_Y_DP * density : 0f;
+        if (!animations || reducedMotion) {
+            wallView.setTranslationX(tx);
+            wallView.setTranslationY(ty);
+            return;
+        }
+        wallView.animate().translationX(tx).translationY(ty).setDuration(700)
+                .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
     }
 
     /**
@@ -1350,7 +1398,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     }
 
     @Override
-    public void onPlexClick(PlexClient.Item item) {
+    public void onPlexClick(PlexClient.Item item, View from) {
         // The season you are in (or the film's page), looked up on the server first: a quick LAN call.
         PLEX_EXEC.execute(() -> {
             String url = plex.watchUrl(item);
@@ -1359,7 +1407,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
                     Intent page = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             .setPackage(PlexClient.PLEX_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     try {
-                        startActivity(page);
+                        if (openFromTile && from.isAttachedToWindow() && from.getWidth() > 0) {
+                            startActivity(page, android.app.ActivityOptions.makeScaleUpAnimation(
+                                    from, 0, 0, from.getWidth(), from.getHeight()).toBundle());
+                        } else {
+                            startActivity(page);
+                        }
                         return;
                     } catch (ActivityNotFoundException ignored) {
                     }
@@ -1374,6 +1427,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     public void onPlexFocused(int position) {
         plexLast = position;
         setRowFocus(true);
+        updateParallax();
         hideGlass();
         PlexClient.Item it = plexAdapter.itemAt(position);
         if (it == null) {
