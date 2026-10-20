@@ -1236,7 +1236,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             String usage = cfg.statusUsageUrl.isEmpty() ? "" : ServerStatus.usageLine(cfg.statusUsageUrl);
             final String n = nodes, u = usage;
             runOnUiThread(() -> {
-                if (statusNodes != null) { statusNodes.setText(n.isEmpty() ? "" : "Tech\n" + n); statusNodes.setVisibility(n.isEmpty() ? View.GONE : View.VISIBLE); }
+                if (statusNodes != null) { statusNodes.setText(n.isEmpty() ? "" : "Tech  (cpu · ram · temp)\n" + n); statusNodes.setVisibility(n.isEmpty() ? View.GONE : View.VISIBLE); }
                 if (statusUsage != null) { statusUsage.setText(u.isEmpty() ? "" : "AI\n" + u); statusUsage.setVisibility(u.isEmpty() ? View.GONE : View.VISIBLE); }
             });
         });
