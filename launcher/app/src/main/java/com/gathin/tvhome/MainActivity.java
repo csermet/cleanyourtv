@@ -319,6 +319,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             sf.addAction(Intent.ACTION_SCREEN_OFF);
             registerReceiver(screenReceiver, sf);
             TvSounds.get(this);   // load now, so the first event is ready
+            // Started with the screen already on (the TV may kill Home in standby and start it again on
+            // wake): the screen-on broadcast came before this receiver, so count this start as the wake.
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            if (savedInstanceState == null && pm != null && pm.isInteractive()
+                    && android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime() < 30_000L) {
+                TvSounds.screenOn(this);
+            }
         }
         wallpaperShown = cfg.wallpaper;
         if (cfg.wallpaper != null) showWallpaper(cfg.wallpaper);
