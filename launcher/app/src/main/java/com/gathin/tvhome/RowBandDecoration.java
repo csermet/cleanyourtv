@@ -19,6 +19,8 @@ public class RowBandDecoration extends RecyclerView.ItemDecoration {
     private final Paint band = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
+    /** False when RowBands draws the band behind the row (plex_row); the item offsets stay. */
+    boolean draw = true;
 
     RowBandDecoration(float density, int opacityPercent) {
         this.density = density;
@@ -38,6 +40,7 @@ public class RowBandDecoration extends RecyclerView.ItemDecoration {
 
     @Override
     public void onDraw(@NonNull Canvas c, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
+        if (!draw) return;
         for (int i = 0; i < parent.getChildCount(); i++) {
             View child = parent.getChildAt(i);
             View card = child.findViewById(R.id.card);
@@ -45,7 +48,7 @@ public class RowBandDecoration extends RecyclerView.ItemDecoration {
             float t = child.getTop() + card.getTop() + child.getTranslationY();
             float b = t + card.getHeight();
             // The full width of the row, a little inside the list's edges; the tiles sit inset by its padding.
-            float inset = 14 * density, pad = 10 * density;
+            float inset = 6 * density, pad = 10 * density;
             rect.set(inset, t - pad, parent.getWidth() - inset, b + pad);
             float radius = 14 * density;
             c.drawRoundRect(rect, radius, radius, band);

@@ -121,6 +121,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private final float rowTiles;
     /** Config.tileGap (single_row): fixed space between tiles in dp; the focus zoom may then touch a neighbour. */
     private final int tileGapDp;
+    /** single_row: the row's inner width when the first tiles were made; the row may later be laid out wider. */
+    private int fixedInner;
     /** Dock order (config.xml dock_apps, or a theme's config.json). */
     private final List<String> favourites;
     /** Grid apps fill the dock slots dock_apps leaves free (config.xml, fill_dock). */
@@ -246,6 +248,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
         int inner = width - parent.getPaddingLeft() - parent.getPaddingRight();
         int w = tileWidthPx(inner, dockSize, density), h = tileHeightPx(w);
+        if (singleRow && inner > 0 && fixedInner == 0) fixedInner = inner;
+        if (singleRow && fixedInner > 0) inner = fixedInner;
         if (singleRow && inner > 0) {
             // A horizontal list gives each item the row's full width otherwise: one cell per column,
             // or row_tiles cells per screen (fractions allowed) with tiles sized to fit them.

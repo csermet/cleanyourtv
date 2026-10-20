@@ -132,10 +132,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     /** single_row: the title box has been lined up with the first tile's left edge. */
     private boolean heroAligned;
     /** single_row + plex_row: the focused row is full size, the other ROW_SMALL; the gap between the bands stays. */
-    private static final float ROW_SMALL = 0.82f;
+    private static final float ROW_SMALL = 0.70f;
+    /** single_row: the bands reach this far past the column's padding, towards the screen edges; the tiles stay put. */
+    private static final float BAND_OUTSET_DP = 16f;
     private static final float ROW_GAP_DP = 12f, PLEX_INNER_TOP_DP = 10f, APPS_INNER_BOTTOM_DP = 80f;
     private boolean plexFocused;
     private ValueAnimator rowAnim;
+    private RowBandDecoration appsBand;
+    private RowBands bands;
+    /** The rows' normal width (the wrapper's); a shrunk row is laid out wider so its tiles still reach the band's end. */
+    private int rowWidth;
     /** The focused app tile's layout top in root coordinates, for the title above the (scaled) row. */
     private float appsCardTop = Float.NaN;
     /** Config.plexRow: the Plex recommended row under the single row; null when off. */
@@ -306,7 +312,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             grid.setLayoutParams(glp);
             // Inset the tiles from the band's ends so the first and last focus have room, and clip them
             // there as they scroll; the band itself is drawn before the children, into the padding.
-            int side = (int) (28 * density);
+            int out = (int) (BAND_OUTSET_DP * density);
+            ViewGroup.MarginLayoutParams wlp = (ViewGroup.MarginLayoutParams) ((View) grid.getParent()).getLayoutParams();
+            wlp.setMarginStart(-out);
+            wlp.setMarginEnd(-out);
+            ((View) grid.getParent()).setLayoutParams(wlp);
+            int side = (int) (28 * density) + out;
             grid.setPadding(side, grid.getPaddingTop(), side, grid.getPaddingBottom());
             grid.setClipToPadding(true);
         } else grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
@@ -344,7 +355,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
-        grid.addItemDecoration(singleRow ? new RowBandDecoration(density, cfg.bandOpacity) : new DockDecoration(COLUMNS, density));
+        if (singleRow) {
+            appsBand = new RowBandDecoration(density, cfg.bandOpacity);
+            grid.addItemDecoration(appsBand);
+        } else grid.addItemDecoration(new DockDecoration(COLUMNS, density));
         if (animations) {
             int enterAnim = reducedMotion ? R.anim.tile_enter_reduced : R.anim.tile_enter;
             float enterDelay = reducedMotion ? 0f : 0.06f;
@@ -1133,17 +1147,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         plexRow.setAdapter(plexAdapter);
         plexRow.setItemAnimator(null);
         plexRow.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        plexRow.addItemDecoration(new RowBandDecoration(density, bandOpacity));
-        int side = (int) (28 * density);
+        RowBandDecoration plexBand = new RowBandDecoration(density, bandOpacity);
+        plexBand.draw = false;
+        plexRow.addItemDecoration(plexBand);
+        if (appsBand != null) appsBand.draw = false;
+        int side = (int) ((28 + BAND_OUTSET_DP) * density);
         plexRow.setPadding(side, (int) (8 * density), side, (int) (16 * density));
         plexRow.setClipToPadding(true);
         plexRow.setVisibility(View.GONE);
         ViewGroup wrap = (ViewGroup) grid.getParent();
         wrap.addView(plexRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        bands = new RowBands(this, density, bandOpacity, grid, plexRow);
+        wrap.addView(bands, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        View.OnLayoutChangeListener redraw = (v, l, tp, r, b, ol, ot, or, ob) -> bands.invalidate();
+        grid.addOnLayoutChangeListener(redraw);
+        plexRow.addOnLayoutChangeListener(redraw);
         wrap.post(() -> {
+            rowWidth = wrap.getWidth();
+            bands.setNormalWidth(rowWidth);
             // About six cards on screen: the cut-off one says the row scrolls on.
-            plexAdapter.setSize(wrap.getWidth() - 2 * side, 6.2f, density);
+            plexAdapter.setSize(wrap.getWidth() - 2 * side, 5.6f, density);
             loadPlex();
         });
     }
@@ -1183,6 +1207,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         if (items == null || items.isEmpty()) {
             if (plexRow.hasFocus()) focusTile(lastFocused);
             plexRow.setVisibility(View.GONE);
+            setRowWide(grid, false);
             applyRows(1f, 1f);
             glp.bottomMargin = 0;
             grid.setLayoutParams(glp);
@@ -1197,10 +1222,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             grid.setLayoutParams(glp);
             // The app row moved up: once it is laid out there, put the highlight and title back on its tile.
             grid.post(() -> grid.post(() -> {
+                setRowWide(plexFocused ? grid : plexRow, true);
+                setRowWide(plexFocused ? plexRow : grid, false);
                 applyRows(plexFocused ? ROW_SMALL : 1f, plexFocused ? 1f : ROW_SMALL);
                 if (grid.hasFocus()) focusTile(lastFocused);
             }));
         });
+    }
+
+    /** A shrunk row is laid out 1/ROW_SMALL wider, so at its small scale it still spans the band. */
+    private void setRowWide(RecyclerView row, boolean wide) {
+        if (row == null || rowWidth <= 0) return;
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) row.getLayoutParams();
+        int want = wide ? (int) Math.ceil(rowWidth / ROW_SMALL) + 2 : ViewGroup.LayoutParams.MATCH_PARENT;
+        if (lp.width != want) {
+            lp.width = want;
+            row.setLayoutParams(lp);
+        }
+    }
+
+    /** Tiles end at the band's inner edge (the normal right padding), at any scale and layout width. */
+    private void clipRow(RecyclerView row, float s) {
+        if (row == null || rowWidth <= 0 || row.getHeight() <= 0) return;
+        float px = row.getPaddingLeft();
+        int right = Math.round(px + (rowWidth - row.getPaddingRight() - px) / s);
+        row.setClipBounds(new Rect(row.getPaddingLeft(), 0, right, row.getHeight()));
     }
 
     /** The focused app tile's top on screen, with the app row's current scale and shift. */
@@ -1222,8 +1268,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         float fromA = grid.getScaleY(), fromP = plexRow.getScaleY();
         float toA = plex ? ROW_SMALL : 1f, toP = plex ? 1f : ROW_SMALL;
         if (rowAnim != null) rowAnim.cancel();
+        setRowWide(plex ? grid : plexRow, true);
         if (!animations || reducedMotion) {
             applyRows(toA, toP);
+            setRowWide(plex ? plexRow : grid, false);
             if (!plex) focusTile(lastFocused);
             return;
         }
@@ -1239,6 +1287,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             public void onAnimationEnd(android.animation.Animator animation) {
                 if (rowAnim != animation) return;
                 rowAnim = null;
+                setRowWide(plexFocused ? plexRow : grid, false);
                 // Snap the highlight onto the full-size tile once the row has settled.
                 if (!plexFocused && grid.hasFocus()) focusTile(lastFocused);
             }
@@ -1261,6 +1310,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         grid.setScaleY(sa);
         plexRow.setScaleX(sp);
         plexRow.setScaleY(sp);
+        clipRow(grid, sa);
+        clipRow(plexRow, sp);
+        if (bands != null) bands.invalidate();
         float plexTop = plexRow.getBottom() - sp * plexRow.getHeight();
         float plexBandTop = plexTop + sp * PLEX_INNER_TOP_DP * density;
         float ty = plexBandTop - ROW_GAP_DP * density + sa * APPS_INNER_BOTTOM_DP * density - grid.getBottom();
