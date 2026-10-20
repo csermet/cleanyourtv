@@ -1179,27 +1179,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         date.setTextSize(16f);
         boolean status = cfg != null && (!cfg.statusNodes.isEmpty() || !cfg.statusUsageUrl.isEmpty());
         if (!status) return;
+        int accent = cfg.textColor != 0 ? cfg.textColor : 0xFFFFFFFF;
         View rule = new View(this);
-        rule.setBackgroundColor(0x40FFFFFF);
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams((int) (360 * density), Math.max(1, (int) density));
-        rlp.topMargin = (int) (10 * density);
-        rlp.bottomMargin = (int) (8 * density);
+        rule.setBackgroundColor((0x55 << 24) | (accent & 0x00FFFFFF));
+        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams((int) (300 * density), Math.max(1, (int) density));
+        rlp.topMargin = (int) (8 * density);
+        rlp.bottomMargin = (int) (6 * density);
         rlp.setMarginStart((int) (2 * density));
         left.addView(rule, at++, rlp);
-        statusNodes = statusLine();
-        statusUsage = statusLine();
-        left.addView(statusNodes, at++);
-        left.addView(statusUsage, at);
+        // Two small columns, like notes: "AI" (usage windows) | "Tech" (servers).
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.HORIZONTAL);
+        statusUsage = statusLine(accent);
+        statusNodes = statusLine(accent);
+        View bar = new View(this);
+        bar.setBackgroundColor((0x55 << 24) | (accent & 0x00FFFFFF));
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(Math.max(1, (int) density), ViewGroup.LayoutParams.MATCH_PARENT);
+        blp.setMarginStart((int) (14 * density));
+        blp.setMarginEnd((int) (14 * density));
+        box.addView(statusUsage);
+        box.addView(bar, blp);
+        box.addView(statusNodes);
+        left.addView(box, at);
     }
 
-    private TextView statusLine() {
+    private TextView statusLine(int accent) {
         TextView v = new TextView(this);
-        v.setTextSize(13f);
-        v.setTextColor(0xCCFFFFFF);
-        v.setTypeface(androidx.core.content.res.ResourcesCompat.getFont(this, R.font.outfit_regular));
-        v.setSingleLine(true);
-        v.setPadding((int) (2 * density), (int) (2 * density), 0, (int) (2 * density));
-        v.setShadowLayer(3f * density, 0f, 0f, 0xCC000000);
+        v.setTextSize(11f);
+        v.setTextColor((0xB3 << 24) | (accent & 0x00FFFFFF));
+        v.setTypeface(androidx.core.content.res.ResourcesCompat.getFont(this, R.font.outfit_light));
+        v.setLineSpacing(0f, 1.1f);
+        v.setPadding((int) (2 * density), 0, 0, 0);
+        v.setShadowLayer(2f * density, 0f, 0f, 0x99000000);
         return v;
     }
 
@@ -1217,8 +1228,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             String usage = cfg.statusUsageUrl.isEmpty() ? "" : ServerStatus.usageLine(cfg.statusUsageUrl);
             final String n = nodes, u = usage;
             runOnUiThread(() -> {
-                if (statusNodes != null) { statusNodes.setText(n); statusNodes.setVisibility(n.isEmpty() ? View.GONE : View.VISIBLE); }
-                if (statusUsage != null) { statusUsage.setText(u); statusUsage.setVisibility(u.isEmpty() ? View.GONE : View.VISIBLE); }
+                if (statusNodes != null) { statusNodes.setText(n.isEmpty() ? "" : "Tech\n" + n); statusNodes.setVisibility(n.isEmpty() ? View.GONE : View.VISIBLE); }
+                if (statusUsage != null) { statusUsage.setText(u.isEmpty() ? "" : "AI\n" + u); statusUsage.setVisibility(u.isEmpty() ? View.GONE : View.VISIBLE); }
             });
         });
     }

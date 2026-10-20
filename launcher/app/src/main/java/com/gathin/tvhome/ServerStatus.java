@@ -24,8 +24,8 @@ final class ServerStatus {
     String nodesLine(List<String[]> nodes) {
         StringBuilder sb = new StringBuilder();
         for (String[] n : nodes) {
-            if (sb.length() > 0) sb.append("   ·   ");
-            sb.append(n[0]).append("  ");
+            if (sb.length() > 0) sb.append("\n");
+            sb.append(n[0]).append("   ");
             try {
                 sb.append(node(n[1]));
             } catch (Exception e) {
@@ -98,12 +98,9 @@ final class ServerStatus {
                 if (kind.startsWith("session") && session < 0) session = pct;
                 else if (kind.startsWith("week") && o.isNull("model")) week = Math.max(week, pct);
             }
-            StringBuilder sb = new StringBuilder("Claude");
-            if (session >= 0) sb.append("  5s %").append(session);
-            if (week >= 0) sb.append("   ·   hafta %").append(week);
-            return sb.toString();
+            return "5H  " + (session >= 0 ? "%" + session : "—") + "\nW   " + (week >= 0 ? "%" + week : "—");
         } catch (Exception e) {
-            return "Claude  —";
+            return "5H  —\nW   —";
         }
     }
 }
