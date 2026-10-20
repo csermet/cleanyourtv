@@ -86,6 +86,8 @@ final class Config {
     final int ambientGlow;
     /** plex_row: a smaller second row of Plex recommendations under single_row (theme only). */
     final boolean plexRow;
+    /** plex_lan_ip: the Plex server's LAN address, for servers whose advertised local address is a container's. */
+    final String plexLanIp;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -99,7 +101,7 @@ final class Config {
                    int[] settingsKeycodes, boolean settingsKeyPanel, Map<Integer, String> appKeys,
                    File wallpaper, boolean overlayApplied, Festival festival, int textColor, boolean singleRow,
                    boolean networkPill, int topButtonsSize, int bandOpacity,
-                   int ambientGlow, boolean plexRow) {
+                   int ambientGlow, boolean plexRow, String plexLanIp) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -132,6 +134,7 @@ final class Config {
         this.bandOpacity = bandOpacity;
         this.ambientGlow = ambientGlow;
         this.plexRow = plexRow;
+        this.plexLanIp = plexLanIp;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -219,7 +222,8 @@ final class Config {
                 json == null ? 100 : integer(json, "top_buttons_size", 100, 60, 100),
                 json == null ? 100 : integer(json, "band_opacity", 100, 20, 100),
                 json == null ? 100 : integer(json, "ambient_glow", 100, 0, 100),
-                json != null && bool(json, "plex_row", false));
+                json != null && bool(json, "plex_row", false),
+                json == null ? "" : string(json, "plex_lan_ip", ""));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

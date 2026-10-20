@@ -203,7 +203,7 @@ public final class LauncherSettingsActivity extends Activity {
                     Thread.sleep(2500);
                     if (isFinishing() || !dialog.isShowing()) return;
                     if (plex.checkPin(pin.id)) {
-                        boolean server = plex.discover();
+                        boolean server = plex.discover(Config.load(this).plexLanIp);
                         runOnUiThread(() -> {
                             dialog.dismiss();
                             Toast.makeText(this, server ? R.string.plex_link_done : R.string.plex_no_server,

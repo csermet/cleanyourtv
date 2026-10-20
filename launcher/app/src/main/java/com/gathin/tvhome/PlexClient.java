@@ -89,36 +89,71 @@ final class PlexClient {
         return true;
     }
 
-    /** Finds the owner's server (owned first) and its local https connection; false when there is none. */
-    boolean discover() throws IOException, JSONException {
+    /**
+     * Finds the owner's server and an https address this TV can actually reach. A server in Docker
+     * advertises its container address as "local", which other machines cannot reach, so every
+     * candidate is probed (GET /identity, short timeout). {@code lanIp} (theme plex_lan_ip) adds the
+     * server's LAN address in the certificate's plex.direct form and is tried first.
+     */
+    boolean discover(String lanIp) throws IOException, JSONException {
         String token = prefs.getString(TOKEN, null);
         if (token == null) return false;
         JSONArray arr = new JSONArray(request("GET", PLEX_TV + "/resources?includeHttps=1&includeRelay=0", token));
-        JSONObject best = null;
-        String bestUri = null;
-        int bestScore = -1;
-        for (int i = 0; i < arr.length(); i++) {
-            JSONObject o = arr.getJSONObject(i);
-            if (!o.optString("provides", "").contains("server")) continue;
-            JSONArray conns = o.optJSONArray("connections");
-            if (conns == null) continue;
-            for (int j = 0; j < conns.length(); j++) {
-                JSONObject c = conns.getJSONObject(j);
-                if (c.optBoolean("relay", false) || !"https".equals(c.optString("protocol"))) continue;
-                int score = (o.optBoolean("owned", false) ? 2 : 0) + (c.optBoolean("local", false) ? 1 : 0);
-                if (score > bestScore) {
-                    bestScore = score;
-                    best = o;
-                    bestUri = c.optString("uri", null);
+        java.util.regex.Pattern direct = java.util.regex.Pattern.compile("https://[^/.]+\\.([0-9a-f]+)\\.plex\\.direct:(\\d+)");
+        for (int pass = 0; pass < 2; pass++) {
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject o = arr.getJSONObject(i);
+                if (!o.optString("provides", "").contains("server")) continue;
+                if (pass == 0 && !o.optBoolean("owned", false)) continue;   // the owner's own server first
+                String serverToken = o.optString("accessToken", token);
+                List<String> candidates = new ArrayList<>();
+                JSONArray conns = o.optJSONArray("connections");
+                if (conns == null) continue;
+                for (int j = 0; j < conns.length(); j++) {
+                    JSONObject c = conns.getJSONObject(j);
+                    if (c.optBoolean("relay", false) || !"https".equals(c.optString("protocol"))) continue;
+                    String uri = c.optString("uri", "");
+                    if (uri.isEmpty()) continue;
+                    java.util.regex.Matcher m = direct.matcher(uri);
+                    if (lanIp != null && !lanIp.isEmpty() && m.find()) {
+                        String lan = "https://" + lanIp.trim().replace('.', '-') + "." + m.group(1) + ".plex.direct:" + m.group(2);
+                        if (!candidates.contains(lan)) candidates.add(0, lan);
+                    }
+                    if (c.optBoolean("local", false)) candidates.add(uri);
+                    else candidates.add(candidates.size(), uri);
+                }
+                for (String uri : candidates) {
+                    if (!reachable(uri, serverToken)) continue;
+                    prefs.edit().putString(URI, uri)
+                            .putString(SERVER_TOKEN, serverToken)
+                            .putString(SERVER_ID, o.optString("clientIdentifier", ""))
+                            .putString(SERVER_NAME, o.optString("name", "Plex")).apply();
+                    return true;
                 }
             }
         }
-        if (best == null || bestUri == null) return false;
-        prefs.edit().putString(URI, bestUri)
-                .putString(SERVER_TOKEN, best.optString("accessToken", token))
-                .putString(SERVER_ID, best.optString("clientIdentifier", ""))
-                .putString(SERVER_NAME, best.optString("name", "Plex")).apply();
-        return true;
+        return false;
+    }
+
+    /** Forget the server address, so the next load looks for it again. */
+    void forgetServer() {
+        prefs.edit().remove(URI).remove(SERVER_TOKEN).remove(SERVER_ID).remove(SERVER_NAME).apply();
+    }
+
+    private boolean reachable(String base, String token) {
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(base + "/identity").openConnection();
+            c.setConnectTimeout(2500);
+            c.setReadTimeout(2500);
+            c.setRequestProperty("Accept", "application/json");
+            if (token != null) c.setRequestProperty("X-Plex-Token", token);
+            return c.getResponseCode() / 100 == 2;
+        } catch (IOException e) {
+            return false;
+        } finally {
+            if (c != null) c.disconnect();
+        }
     }
 
     // ---- the row --------------------------------------------------------------------------------
@@ -127,14 +162,25 @@ final class PlexClient {
     List<Item> recommended(int max) throws IOException, JSONException {
         List<Item> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        JSONArray recent = metadata(server("/library/recentlyAdded?X-Plex-Container-Start=0&X-Plex-Container-Size=40"));
-        for (int i = 0; i < recent.length() && out.size() < max / 2; i++) add(out, seen, recent.getJSONObject(i));
-        List<Item> random = new ArrayList<>();
+        // Film and series libraries only: personal media (camera clips, home videos) has no agent.
         JSONArray sections = directories(server("/library/sections"));
+        List<JSONObject> libraries = new ArrayList<>();
+        Set<String> allowed = new HashSet<>();
         for (int i = 0; i < sections.length(); i++) {
             JSONObject s = sections.getJSONObject(i);
             String type = s.optString("type");
             if (!"movie".equals(type) && !"show".equals(type)) continue;
+            if (s.optString("agent", "").contains("none")) continue;
+            libraries.add(s);
+            allowed.add(s.optString("key"));
+        }
+        JSONArray recent = metadata(server("/library/recentlyAdded?X-Plex-Container-Start=0&X-Plex-Container-Size=60"));
+        for (int i = 0; i < recent.length() && out.size() < max / 2; i++) {
+            JSONObject m = recent.getJSONObject(i);
+            if (allowed.contains(m.optString("librarySectionID"))) add(out, seen, m);
+        }
+        List<Item> random = new ArrayList<>();
+        for (JSONObject s : libraries) {
             JSONArray all = metadata(server("/library/sections/" + s.optString("key")
                     + "/all?unwatched=1&sort=random&X-Plex-Container-Start=0&X-Plex-Container-Size=" + max));
             for (int j = 0; j < all.length(); j++) add(random, seen, all.getJSONObject(j));

@@ -45,9 +45,9 @@ public class RowBandDecoration extends RecyclerView.ItemDecoration {
             float t = child.getTop() + card.getTop() + child.getTranslationY();
             float b = t + card.getHeight();
             // The full width of the row, a little inside the list's edges; the tiles sit inset by its padding.
-            float inset = 4 * density, pad = 16 * density;
+            float inset = 14 * density, pad = 10 * density;
             rect.set(inset, t - pad, parent.getWidth() - inset, b + pad);
-            float radius = 26 * density;
+            float radius = 14 * density;
             c.drawRoundRect(rect, radius, radius, band);
             c.drawRoundRect(rect, radius, radius, edge);
             return;

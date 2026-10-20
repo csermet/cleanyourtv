@@ -128,6 +128,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private PlexRowAdapter plexAdapter;
     private PlexClient plex;
     private long plexLoadedAt = Long.MIN_VALUE / 2;
+    private String plexLanIp = "";
     private boolean plexLoading;
     private int plexLast;
     private static final java.util.concurrent.ExecutorService PLEX_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -336,6 +337,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         }
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         grid.setAdapter(adapter);
+        plexLanIp = cfg.plexLanIp;
         if (singleRow && cfg.plexRow) setUpPlexRow(cfg.bandOpacity);
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
@@ -1010,7 +1012,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         wrap.addView(plexRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
         wrap.post(() -> {
-            plexAdapter.setSize(wrap.getWidth() - 2 * side, 8, density);
+            // About five and a half cards on screen: the cut-off one says the row scrolls on.
+            plexAdapter.setSize(wrap.getWidth() - 2 * side, 5.5f, density);
             loadPlex();
         });
     }
@@ -1020,12 +1023,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         plexLoading = true;
         PLEX_EXEC.execute(() -> {
             List<PlexClient.Item> got = null;
-            try {
-                if (!plex.hasServer()) plex.discover();
-                got = plex.recommended(20);
-            } catch (Exception e) {
-                // Never the token: request() errors carry only the HTTP status or the host.
-                android.util.Log.w("tvhome-plex", "load failed: " + e.getClass().getSimpleName());
+            for (int attempt = 0; attempt < 2 && got == null; attempt++) {
+                try {
+                    if (!plex.hasServer() && !plex.discover(plexLanIp)) {
+                        android.util.Log.w("tvhome-plex", "no reachable server");
+                        break;
+                    }
+                    got = plex.recommended(20);
+                    android.util.Log.i("tvhome-plex", "loaded " + got.size() + " items from " + plex.serverName());
+                } catch (Exception e) {
+                    // Never the token: request() errors carry only the HTTP status or the host. A stored
+                    // address that stopped answering is forgotten and looked up once more right away.
+                    android.util.Log.w("tvhome-plex", "load failed: " + e.getClass().getSimpleName());
+                    plex.forgetServer();
+                }
             }
             final List<PlexClient.Item> items = got;
             runOnUiThread(() -> {
@@ -1050,8 +1061,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         plexRow.setVisibility(View.VISIBLE);
         plexRow.post(() -> {
             // The app row sits just above the Plex band, with a small gap between the two bands.
-            glp.bottomMargin = Math.max(0, plexRow.getHeight() - (int) (20 * density));
+            // The app row sits just above the Plex band; the tiles' hidden label space is taken back.
+            glp.bottomMargin = Math.max(0, plexRow.getHeight() - (int) (78 * density));
             grid.setLayoutParams(glp);
+            // The app row moved up: once it is laid out there, put the highlight and title back on its tile.
+            grid.post(() -> grid.post(() -> {
+                if (grid.hasFocus()) focusTile(lastFocused);
+            }));
         });
     }
 

@@ -48,9 +48,9 @@ final class PlexRowAdapter extends RecyclerView.Adapter<PlexRowAdapter.Holder> {
     }
 
     /** Card size from the row's inner width and the number of cards per screen. */
-    void setSize(int innerWidth, int perScreen, float density) {
-        cellWidth = innerWidth / perScreen;
-        cardWidth = cellWidth - Math.round(14 * density);
+    void setSize(int innerWidth, float perScreen, float density) {
+        cellWidth = Math.round(innerWidth / perScreen);
+        cardWidth = cellWidth - Math.round(16 * density);
         cardHeight = Math.round(cardWidth * 9f / 16f);
     }
 
@@ -100,7 +100,7 @@ final class PlexRowAdapter extends RecyclerView.Adapter<PlexRowAdapter.Holder> {
             int pos = h.getBindingAdapterPosition();
             return pos != RecyclerView.NO_POSITION && listener.onPlexKey(pos, keyCode);
         });
-        String url = plex.imageUrl(it.image, Math.max(320, cardWidth), Math.max(180, cardHeight));
+        String url = plex.imageUrl(it.image, Math.max(480, cardWidth), Math.max(270, cardHeight));
         h.art.setTag(url);
         Bitmap cached = url == null ? null : CACHE.get(url);
         h.art.setImageBitmap(cached);
