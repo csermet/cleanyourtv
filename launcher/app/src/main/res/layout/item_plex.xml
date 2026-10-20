@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One card in the Plex recommended row (single_row + plex_row). Sized in code (PlexRowAdapter). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <FrameLayout
+        android:id="@+id/card"
+        android:layout_width="160dp"
+        android:layout_height="90dp"
+        android:layout_gravity="center_horizontal"
+        android:background="@drawable/plex_card_bg"
+        android:clipToOutline="true"
+        android:focusable="true"
+        android:clickable="true">
+
+        <ImageView
+            android:id="@+id/art"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:duplicateParentState="false" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/plex_card_shade" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:orientation="vertical"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:id="@+id/title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:textColor="#FFFFFFFF"
+                android:textSize="11sp"
+                android:fontFamily="@font/outfit_medium" />
+
+            <TextView
+                android:id="@+id/subtitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:textColor="#B3FFFFFF"
+                android:textSize="9sp"
+                android:fontFamily="@font/outfit_regular" />
+        </LinearLayout>
+    </FrameLayout>
+</FrameLayout>

@@ -78,4 +78,20 @@
     <string name="reset_order">Reset app order</string>
     <string name="order_reset_done">App order reset</string>
     <string name="tile_menu_hint">Hold OK on a tile to move or hide it.</string>
+    <string name="section_wallpaper">Wallpaper</string>
+    <string name="section_plex">Plex</string>
+    <string name="section_apps">Apps</string>
+    <string name="section_home">Home screen</string>
+    <string name="section_system">System</string>
+    <string name="wallpaper_picker_hint">Move to preview. OK sets it for today; the daily shuffle carries on tomorrow.</string>
+    <string name="plex_hint">Recently added and unwatched picks from your server, in a small row under the apps.</string>
+    <string name="plex_connect">Connect Plex</string>
+    <string name="plex_connected">Plex: %1$s (connected)</string>
+    <string name="plex_link_wait">Getting a code…</string>
+    <string name="plex_link_code">On your phone or computer open plex.tv/link and enter:\n\n%1$s</string>
+    <string name="plex_link_done">Plex connected</string>
+    <string name="plex_no_server">Signed in, but no Plex server was found</string>
+    <string name="plex_link_error">Could not reach plex.tv. Check the connection and try again.</string>
+    <string name="plex_disconnect_q">Disconnect Plex?</string>
+    <string name="plex_disconnect">Disconnect</string>
 </resources>

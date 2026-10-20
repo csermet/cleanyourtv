@@ -72,4 +72,20 @@
     <string name="reset_order">Uygulama sırasını sıfırla</string>
     <string name="order_reset_done">Uygulama sırası sıfırlandı</string>
     <string name="tile_menu_hint">Taşımak ya da gizlemek için bir kutucukta OK\'e basılı tut.</string>
+    <string name="section_wallpaper">Duvar kağıdı</string>
+    <string name="section_plex">Plex</string>
+    <string name="section_apps">Uygulamalar</string>
+    <string name="section_home">Ana ekran</string>
+    <string name="section_system">Sistem</string>
+    <string name="wallpaper_picker_hint">Önizlemek için gez. OK bugün için seçer; günlük karışık sıra yarın devam eder.</string>
+    <string name="plex_hint">Sunucundan son eklenenler ve izlemediklerin, uygulamaların altında küçük bir satırda.</string>
+    <string name="plex_connect">Plex\'i bağla</string>
+    <string name="plex_connected">Plex: %1$s (bağlı)</string>
+    <string name="plex_link_wait">Kod alınıyor…</string>
+    <string name="plex_link_code">Telefonundan ya da bilgisayarından plex.tv/link adresini aç ve şunu gir:\n\n%1$s</string>
+    <string name="plex_link_done">Plex bağlandı</string>
+    <string name="plex_no_server">Giriş yapıldı ama Plex sunucusu bulunamadı</string>
+    <string name="plex_link_error">plex.tv\'ye ulaşılamadı. Bağlantıyı kontrol edip tekrar dene.</string>
+    <string name="plex_disconnect_q">Plex bağlantısı kesilsin mi?</string>
+    <string name="plex_disconnect">Bağlantıyı kes</string>
 </resources>

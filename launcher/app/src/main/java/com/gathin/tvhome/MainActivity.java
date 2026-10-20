@@ -78,7 +78,7 @@ import java.util.Set;
 /**
  * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
  */
-public class MainActivity extends Activity implements AppAdapter.TileListener {
+public class MainActivity extends Activity implements AppAdapter.TileListener, PlexRowAdapter.Listener {
 
     private static final int LAUNCHER_SETTINGS_REQUEST = 42;
     /** Sent by QuickSettingsActivity: open Launcher settings from here so Home rebuilds when they close. */
@@ -123,6 +123,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private float glassScrollShiftX;
     /** Config.singleRow: one horizontal row, no grid. */
     private boolean singleRow;
+    /** Config.plexRow: the Plex recommended row under the single row; null when off. */
+    private RecyclerView plexRow;
+    private PlexRowAdapter plexAdapter;
+    private PlexClient plex;
+    private long plexLoadedAt = Long.MIN_VALUE / 2;
+    private boolean plexLoading;
+    private int plexLast;
+    private static final java.util.concurrent.ExecutorService PLEX_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final long PLEX_REFRESH_MS = 15 * 60_000L;
     private boolean glassShown;
     // Static so they survive the activity being destroyed while another app is open (low-memory TVs,
     // or Developer options → "Don't keep activities"); they only reset when the process dies.
@@ -327,6 +336,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         grid.setAdapter(adapter);
+        if (singleRow && cfg.plexRow) setUpPlexRow(cfg.bandOpacity);
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
@@ -587,6 +597,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             reloadApps(true);
         }
         rebuildOnResume = false;
+        if (plex != null && android.os.SystemClock.elapsedRealtime() - plexLoadedAt > PLEX_REFRESH_MS) loadPlex();
         updateGreeting();
         updateWifiLabel();
         updateInputsButton();
@@ -927,6 +938,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 return GridNavigation.atHorizontalEdge(position, count, Math.max(1, count),
                         rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
             }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && plexRow != null && plexRow.getVisibility() == View.VISIBLE) {
+                focusPlex();
+                return true;
+            }
             return keyCode != KeyEvent.KEYCODE_DPAD_UP;
         }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
@@ -974,6 +989,122 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 })
                 .show();
         return true;
+    }
+
+    // ---- Plex recommended row (single_row + plex_row) --------------------------------------------
+
+    private void setUpPlexRow(int bandOpacity) {
+        plex = new PlexClient(this);
+        plexAdapter = new PlexRowAdapter(plex, this);
+        plexRow = new RecyclerView(this);
+        plexRow.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, rtlAppGrid));
+        plexRow.setAdapter(plexAdapter);
+        plexRow.setItemAnimator(null);
+        plexRow.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        plexRow.addItemDecoration(new RowBandDecoration(density, bandOpacity));
+        int side = (int) (28 * density);
+        plexRow.setPadding(side, (int) (8 * density), side, (int) (18 * density));
+        plexRow.setClipToPadding(true);
+        plexRow.setVisibility(View.GONE);
+        ViewGroup wrap = (ViewGroup) grid.getParent();
+        wrap.addView(plexRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        wrap.post(() -> {
+            plexAdapter.setSize(wrap.getWidth() - 2 * side, 8, density);
+            loadPlex();
+        });
+    }
+
+    private void loadPlex() {
+        if (plex == null || plexLoading || !plex.linked()) return;
+        plexLoading = true;
+        PLEX_EXEC.execute(() -> {
+            List<PlexClient.Item> got = null;
+            try {
+                if (!plex.hasServer()) plex.discover();
+                got = plex.recommended(20);
+            } catch (Exception e) {
+                // Never the token: request() errors carry only the HTTP status or the host.
+                android.util.Log.w("tvhome-plex", "load failed: " + e.getClass().getSimpleName());
+            }
+            final List<PlexClient.Item> items = got;
+            runOnUiThread(() -> {
+                plexLoading = false;
+                plexLoadedAt = android.os.SystemClock.elapsedRealtime();
+                showPlexItems(items);
+            });
+        });
+    }
+
+    private void showPlexItems(List<PlexClient.Item> items) {
+        if (plexRow == null) return;
+        FrameLayout.LayoutParams glp = (FrameLayout.LayoutParams) grid.getLayoutParams();
+        if (items == null || items.isEmpty()) {
+            if (plexRow.hasFocus()) focusTile(lastFocused);
+            plexRow.setVisibility(View.GONE);
+            glp.bottomMargin = 0;
+            grid.setLayoutParams(glp);
+            return;
+        }
+        plexAdapter.setItems(items);
+        plexRow.setVisibility(View.VISIBLE);
+        plexRow.post(() -> {
+            // The app row sits just above the Plex band, with a small gap between the two bands.
+            glp.bottomMargin = Math.max(0, plexRow.getHeight() - (int) (20 * density));
+            grid.setLayoutParams(glp);
+        });
+    }
+
+    private void focusPlex() {
+        int pos = Math.max(0, Math.min(plexLast, plexAdapter.getItemCount() - 1));
+        RecyclerView.ViewHolder vh = plexRow.findViewHolderForAdapterPosition(pos);
+        if (vh != null) {
+            vh.itemView.findViewById(R.id.card).requestFocus();
+            return;
+        }
+        plexRow.scrollToPosition(pos);
+        plexRow.post(() -> {
+            RecyclerView.ViewHolder h = plexRow.findViewHolderForAdapterPosition(pos);
+            View target = h != null ? h.itemView.findViewById(R.id.card)
+                    : plexRow.getChildCount() > 0 ? plexRow.getChildAt(0).findViewById(R.id.card) : null;
+            if (target != null) target.requestFocus();
+        });
+    }
+
+    @Override
+    public void onPlexClick(PlexClient.Item item) {
+        Intent deep = new Intent(Intent.ACTION_VIEW, Uri.parse(plex.deepLink(item.ratingKey)))
+                .setPackage(PlexClient.PLEX_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            startActivity(deep);
+        } catch (ActivityNotFoundException e) {
+            Intent app = getPackageManager().getLeanbackLaunchIntentForPackage(PlexClient.PLEX_PACKAGE);
+            if (app != null) open(app);
+        }
+    }
+
+    @Override
+    public void onPlexFocused(int position) {
+        plexLast = position;
+        hideGlass();
+        hideHero();
+    }
+
+    @Override
+    public boolean onPlexKey(int position, int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                focusTile(lastFocused);
+                return true;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                return true;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                return position == 0;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                return position == plexAdapter.getItemCount() - 1;
+            default:
+                return false;
+        }
     }
 
     private void focusTile(int position) {

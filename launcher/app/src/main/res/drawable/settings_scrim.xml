@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark on the left where the rows are, lighter to the right so the wallpaper shows. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient android:angle="0" android:startColor="#F00A0A0F" android:centerColor="#D90A0A0F" android:endColor="#800A0A0F" />
+</shape>
