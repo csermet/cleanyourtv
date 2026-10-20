@@ -15,7 +15,7 @@ import java.util.Map;
  * Theme sounds (theme sounds: true, files in the theme's sounds/ folder): wake.ogg when the screen
  * comes on (wake_delay_s late, 3 s by default, so a soundbar on ARC is awake; at most once per 5 minutes), sleep.ogg when it
  * goes off, launch.ogg when an app is opened. Nothing else makes a sound, the system click sounds are
- * left alone, and night mode hours are silent. A missing folder or file is skipped quietly.
+ * left alone; night_quiet_sounds can silence night mode hours. A missing folder or file is skipped quietly.
  */
 final class TvSounds {
     private static TvSounds instance;
@@ -79,7 +79,8 @@ final class TvSounds {
 
     private void play(String name) {
         Integer id = ids.get(name);
-        if (id == null || !Boolean.TRUE.equals(ready.get(name)) || NightMode.isNight(cfg)) return;
+        if (id == null || !Boolean.TRUE.equals(ready.get(name))
+                || (cfg.nightQuietSounds && NightMode.isNight(cfg))) return;
         float v = Math.max(0, Math.min(100, cfg.soundVolume)) / 100f;
         pool.play(id, v, v, 1, 0, 1f);
     }
