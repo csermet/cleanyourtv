@@ -74,14 +74,25 @@ final class TvSounds {
         long now = SystemClock.elapsedRealtime();
         if (now - s.lastWake < WAKE_COOLDOWN_MS) return;
         s.lastWake = now;
-        s.handler.postDelayed(() -> s.play("wake"), s.cfg.wakeDelayS * 1000L);
+        long delay = s.cfg.wakeDelayS * 1000L;
+        if (s.cfg.soundPrerollMs > 0) {
+            // Silent first: the TV sends no audio to the soundbar while quiet, and it needs a moment to lock on.
+            s.handler.postDelayed(() -> s.play("wake", 0.001f), delay);
+            delay += s.cfg.soundPrerollMs;
+        }
+        s.handler.postDelayed(() -> s.play("wake"), delay);
     }
 
     private void play(String name) {
+        play(name, -1f);
+    }
+
+    /** volume < 0: the theme's sound_volume. */
+    private void play(String name, float volume) {
         Integer id = ids.get(name);
         if (id == null || !Boolean.TRUE.equals(ready.get(name))
                 || (cfg.nightQuietSounds && NightMode.isNight(cfg))) return;
-        float v = Math.max(0, Math.min(100, cfg.soundVolume)) / 100f;
+        float v = volume >= 0 ? volume : Math.max(0, Math.min(100, cfg.soundVolume)) / 100f;
         pool.play(id, v, v, 1, 0, 1f);
     }
 }
