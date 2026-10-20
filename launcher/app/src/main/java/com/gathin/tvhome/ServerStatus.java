@@ -19,19 +19,28 @@ import java.util.Map;
  */
 final class ServerStatus {
     private final Map<String, double[]> lastCpu = new HashMap<>();   // url -> {total, idle}
+    /** Servers the last nodesLine could not reach. */
+    int unreachable;
 
-    /** "intel %12 %37 51°  ·  ryzen …" — cpu, ram, temperature; "…" where a value is not known yet. */
+    /**
+     * One line per server that answered, "intel   %12  %37  51°": cpu, ram, temperature; "…" while CPU
+     * is not known yet. A server that does not answer is left out (unreachable counts it).
+     */
     String nodesLine(List<String[]> nodes) {
         StringBuilder sb = new StringBuilder();
+        int failed = 0;
         for (String[] n : nodes) {
-            if (sb.length() > 0) sb.append("\n");
-            sb.append(n[0]).append("   ");
+            String v;
             try {
-                sb.append(node(n[1]));
+                v = node(n[1]);
             } catch (Exception e) {
-                sb.append("—");
+                failed++;
+                continue;
             }
+            if (sb.length() > 0) sb.append("\n");
+            sb.append(n[0]).append("   ").append(v);
         }
+        unreachable = failed;
         return sb.toString();
     }
 
@@ -67,16 +76,19 @@ final class ServerStatus {
         if (prev != null && total > prev[0]) {
             cpu = "%" + Math.round(100 * (1 - (idle - prev[1]) / (total - prev[0])));
         }
-        String ram = memTotal > 0 && memAvail >= 0 ? "%" + Math.round(100 * (1 - memAvail / memTotal)) : "—";
-        String t = temp >= 0 ? Math.round(temp) + "°" : "";
-        return cpu + "  " + ram + (t.isEmpty() ? "" : "  " + t);
+        String ram = memTotal > 0 && memAvail >= 0 ? "  %" + Math.round(100 * (1 - memAvail / memTotal)) : "";
+        String t = temp >= 0 ? "  " + Math.round(temp) + "°" : "";
+        return cpu + ram + t;
     }
 
     private static double value(String line) {
         return Double.parseDouble(line.substring(line.lastIndexOf(' ') + 1));
     }
 
-    /** "Claude  5s %17 · hafta %39" from the usage JSON's windows (session, and the all-models week). */
+    /**
+     * "5H  %17" and "W   %39" from the usage JSON's windows (session, and the all-models week); a window
+     * it does not have is left out. Null when the endpoint does not answer.
+     */
     static String usageLine(String url) {
         try {
             HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
@@ -98,9 +110,10 @@ final class ServerStatus {
                 if (kind.startsWith("session") && session < 0) session = pct;
                 else if (kind.startsWith("week") && o.isNull("model")) week = Math.max(week, pct);
             }
-            return "5H  " + (session >= 0 ? "%" + session : "—") + "\nW   " + (week >= 0 ? "%" + week : "—");
+            String five = session >= 0 ? "5H  %" + session : "", wk = week >= 0 ? "W   %" + week : "";
+            return five.isEmpty() || wk.isEmpty() ? five + wk : five + "\n" + wk;
         } catch (Exception e) {
-            return "5H  —\nW   —";
+            return null;
         }
     }
 }
