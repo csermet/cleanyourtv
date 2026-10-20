@@ -112,6 +112,8 @@ final class Config {
     final int soundVolume;
     /** wake_delay_s: seconds before wake.ogg, so a soundbar on ARC is listening (0-10, default 3). */
     final int wakeDelayS;
+    /** wake_wait_arc: on wake, count wake_delay_s from the moment the ARC/eARC soundbar connects (at most 20 s), not from the wake. */
+    final boolean wakeWaitArc;
     /** night_quiet_sounds: no theme sounds in night mode hours (default false: sounds play at night too). */
     final boolean nightQuietSounds;
     /** sound_preroll_ms: a silent play this long before wake.ogg opens the audio path (a soundbar on ARC drops the first syllable otherwise). */
@@ -133,7 +135,7 @@ final class Config {
                    int tileGap, int titleSize, boolean parallax, boolean openFromTile,
                    boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin,
                    List<String[]> statusNodes, String statusUsageUrl, boolean sounds, int soundVolume,
-                   int wakeDelayS, boolean nightQuietSounds, int soundPrerollMs) {
+                   int wakeDelayS, boolean wakeWaitArc, boolean nightQuietSounds, int soundPrerollMs) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -182,6 +184,7 @@ final class Config {
         this.sounds = sounds;
         this.soundVolume = soundVolume;
         this.wakeDelayS = wakeDelayS;
+        this.wakeWaitArc = wakeWaitArc;
         this.nightQuietSounds = nightQuietSounds;
         this.soundPrerollMs = soundPrerollMs;
     }
@@ -287,6 +290,7 @@ final class Config {
                 json != null && bool(json, "sounds", false),
                 json == null ? 100 : integer(json, "sound_volume", 100, 0, 100),
                 json == null ? 3 : integer(json, "wake_delay_s", 3, 0, 10),
+                json != null && bool(json, "wake_wait_arc", false),
                 json != null && bool(json, "night_quiet_sounds", false),
                 json == null ? 600 : integer(json, "sound_preroll_ms", 600, 0, 3000));
     }

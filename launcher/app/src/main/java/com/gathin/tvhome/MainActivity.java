@@ -154,7 +154,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private final BroadcastReceiver screenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context c, Intent i) {
-            if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) TvSounds.screenOn(c);
+            if (Intent.ACTION_SCREEN_ON.equals(i.getAction())) TvSounds.screenOn(c, "broadcast");
             else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) TvSounds.screenOff(c);
         }
     };
@@ -195,6 +195,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private int plexLast;
     private static final java.util.concurrent.ExecutorService PLEX_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
     private static final long PLEX_REFRESH_MS = 15 * 60_000L;
+    /**
+     * The Plex row or a status line came back empty: on power-on the TV drops Ethernet and gets it back
+     * some 5 s later, after Home has already asked. Tried again 3 s after each network change, 10 s after
+     * a failure and then every 30 s while Home is shown, six times at most; a success or a network change
+     * starts the count again.
+     */
+    private boolean plexFailed, statusFailed;
+    private int failRetries;
+    private static final long NET_SETTLE_MS = 3_000L, FIRST_RETRY_MS = 10_000L, RETRY_MS = 30_000L;
+    private static final int MAX_RETRIES = 6;
+    private boolean resumed;
+    /** Home was stopped by the screen going off: back on, the Plex row and status lines load again (once the network is up). */
+    private boolean stoppedAsleep;
+    private final Runnable retryFailed = new Runnable() {
+        @Override
+        public void run() {
+            if (!resumed || (!plexFailed && !statusFailed) || failRetries >= MAX_RETRIES) return;
+            failRetries++;
+            android.util.Log.i("tvhome-net", "retry " + failRetries + (plexFailed ? " plex" : "") + (statusFailed ? " status" : ""));
+            if (plexFailed) loadPlex();
+            if (statusFailed) restartStatus();
+        }
+    };
     private boolean glassShown;
     // Static so they survive the activity being destroyed while another app is open (low-memory TVs,
     // or Developer options → "Don't keep activities"); they only reset when the process dies.
@@ -236,6 +259,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         @Override
         public void onAvailable(@NonNull Network network) {
             handler.post(MainActivity.this::updateWifiLabel);
+            handler.post(() -> retrySoon(true));
         }
 
         @Override
@@ -324,7 +348,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
             if (savedInstanceState == null && pm != null && pm.isInteractive()
                     && android.os.SystemClock.elapsedRealtime() - android.os.Process.getStartElapsedRealtime() < 30_000L) {
-                TvSounds.screenOn(this);
+                TvSounds.screenOn(this, "start");
             }
         }
         wallpaperShown = cfg.wallpaper;
@@ -673,6 +697,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     @Override
     protected void onStart() {
         super.onStart();
+        // TCL brings Home up at power-on, seconds before SCREEN_ON: the earliest sign of a wake.
+        if (nightCfg != null && nightCfg.sounds) TvSounds.homeShown(this);
+        if (stoppedAsleep) {
+            stoppedAsleep = false;
+            plexLoadedAt = Long.MIN_VALUE / 2;
+            statusAt = Long.MIN_VALUE / 2;
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -700,7 +731,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             reloadApps(true);
         }
         rebuildOnResume = false;
-        if (plex != null && android.os.SystemClock.elapsedRealtime() - plexLoadedAt > PLEX_REFRESH_MS) loadPlex();
+        resumed = true;
+        if (plex != null && (plexFailed || android.os.SystemClock.elapsedRealtime() - plexLoadedAt > PLEX_REFRESH_MS)) loadPlex();
+        if (statusFailed) statusAt = Long.MIN_VALUE / 2;
         updateGreeting();
         updateWifiLabel();
         updateInputsButton();
@@ -796,6 +829,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         ambient.animate().cancel();
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(statusTick);
+        handler.removeCallbacks(retryFailed);
+        resumed = false;
         if (diya != null) diya.stop();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
@@ -807,6 +842,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         super.onStop();
         unregisterReceiver(packageReceiver);
         rebuildOnResume = true;
+        if (nightCfg != null && nightCfg.sounds) TvSounds.homeStopped(this);
+        android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+        stoppedAsleep = pm != null && !pm.isInteractive();
     }
 
     @Override
@@ -1269,10 +1307,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             String usage = cfg.statusUsageUrl.isEmpty() ? "" : ServerStatus.usageLine(cfg.statusUsageUrl);
             final String n = nodes, u = usage;
             runOnUiThread(() -> {
+                statusFailed = n.contains("—") || u.contains("—");
+                retrySoon(false);
                 if (statusNodes != null) { statusNodes.setText(n.isEmpty() ? "" : "Tech  (cpu · ram · temp)\n" + n); statusNodes.setVisibility(n.isEmpty() ? View.GONE : View.VISIBLE); }
                 if (statusUsage != null) { statusUsage.setText(u.isEmpty() ? "" : "AI\n" + u); statusUsage.setVisibility(u.isEmpty() ? View.GONE : View.VISIBLE); }
             });
         });
+    }
+
+    /** The status lines now, then every five minutes again. */
+    private void restartStatus() {
+        statusAt = Long.MIN_VALUE / 2;
+        handler.removeCallbacks(statusTick);
+        if (resumed) handler.post(statusTick);
+    }
+
+    /** Another try at whatever failed; after a network change the retry count starts over. */
+    private void retrySoon(boolean networkChanged) {
+        if (!plexFailed && !statusFailed) {
+            failRetries = 0;
+            return;
+        }
+        if (networkChanged) failRetries = 0;
+        handler.removeCallbacks(retryFailed);
+        long delay = networkChanged ? NET_SETTLE_MS : failRetries == 0 ? FIRST_RETRY_MS : RETRY_MS;
+        if (resumed) handler.postDelayed(retryFailed, delay);
     }
 
     /** Long Plex titles shrink (down to 24sp) to fit the screen instead of ending in an ellipsis. */
@@ -1381,6 +1440,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             runOnUiThread(() -> {
                 plexLoading = false;
                 plexLoadedAt = android.os.SystemClock.elapsedRealtime();
+                plexFailed = items == null;
+                retrySoon(false);
                 showPlexItems(items);
             });
         });

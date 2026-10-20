@@ -51,7 +51,11 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `accent_color` | `#RRGGBB` | Colour of the focus glow while the festive skin is on; diya gold if not set |
 | `settings_key_keycodes` | list of keycodes | Remote buttons that open Settings, for `HomeKeyService` (TCL Google TV gear: `[83]`) |
 | `app_keys` | object, keycode → package | Remote app buttons for `HomeKeyService`, e.g. `{"4062": "com.netflix.ninja", "4163": "com.tubitv"}`; a button can open any installed app (TCL Google TV codes in `config.xml`) |
-| `sounds` / `sound_volume` | bool / 0-100 | Theme sounds from a `sounds/` folder: `wake.ogg` (screen on, 1 s late, once per 5 min), `sleep.ogg` (screen off), `launch.ogg` (app opened); silent in night mode hours; a missing file is skipped. Off: `false` or delete the folder |
+| `sounds` / `sound_volume` | bool / 0-100 | Theme sounds from a `sounds/` folder: `wake.ogg` (screen on, `wake_delay_s` late, once per 5 min), `sleep.ogg` (screen off), `launch.ogg` (app opened); a missing file is skipped. Off: `false` or delete the folder |
+| `wake_delay_s` | 0 to 10 | Seconds between the wake and `wake.ogg`, so a soundbar on ARC is listening; 3 by default |
+| `wake_wait_arc` | bool | Count `wake_delay_s` from the moment the ARC/eARC soundbar connects after the wake (at most 20 s), not from the wake. For a soundbar that the TV wakes over CEC: it connects ARC some 6 s after power-on and renegotiates it for about 5 s more. False by default |
+| `sound_preroll_ms` | 0 to 3000 | A silent play this long before `wake.ogg`, so the soundbar locks on before the first syllable; 600 by default, 0 turns it off |
+| `night_quiet_sounds` | bool | No theme sounds in night mode hours; false by default |
 | `settings_key_panel` | bool | Those buttons open a small quick settings panel (TV settings, Display, Network, Apps, Launcher settings) instead of the TV's Settings |
 
 ## Wallpapers
