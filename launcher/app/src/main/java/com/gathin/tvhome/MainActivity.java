@@ -1200,7 +1200,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         box.addView(statusUsage);
         box.addView(bar, blp);
         box.addView(statusNodes);
-        left.addView(box, at);
+        left.addView(box, at, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // The line is as long as the notes under it.
+        box.addOnLayoutChangeListener((v, l, tp, r, b, ol, ot, or, ob) -> {
+            int w = r - l;
+            if (w > 0 && rule.getLayoutParams().width != w) {
+                rule.getLayoutParams().width = w;
+                rule.requestLayout();
+            }
+        });
     }
 
     private TextView statusLine(int accent) {
