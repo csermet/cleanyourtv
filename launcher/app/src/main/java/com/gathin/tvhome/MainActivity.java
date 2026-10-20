@@ -125,6 +125,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private boolean singleRow;
     /** Where the top shelf title last sat, so a Plex card can show its title in the same place. */
     private float heroY = Float.NaN;
+    /** heroName's own text size in px, restored for app titles after a long Plex title shrank it. */
+    private float heroTextPx;
+    /** single_row: the title's bottom edge, just above the band; its top follows its height. */
+    private float heroBottom = Float.NaN;
     /** Config.plexRow: the Plex recommended row under the single row; null when off. */
     private RecyclerView plexRow;
     private PlexRowAdapter plexAdapter;
@@ -279,7 +283,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
         grid = findViewById(R.id.grid);
         singleRow = cfg.singleRow;
-        if (singleRow) styleHeroForRow();
+        if (singleRow) styleHeroForRow(cfg.titleSize);
         rtlAppGrid = getResources().getBoolean(R.bool.rtl_app_grid);
         // Mirror only the app grid; the header and other locales keep their own layouts.
         if (singleRow) {
@@ -798,9 +802,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private void showHero(int position, float dockTopInRoot) {
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
-        float y = singleRow ? dockTopInRoot - 12 * density - heroName.getHeight()
+        if (singleRow) heroBottom = dockTopInRoot - 12 * density;
+        float y = singleRow ? heroBottom - heroName.getHeight()
                 : dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
         heroY = y;
+        if (heroTextPx > 0 && heroName.getTextSize() != heroTextPx) heroName.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, heroTextPx);
         boolean changed = !label.contentEquals(heroName.getText());
 
         if (!animations || reducedMotion) {
@@ -1000,34 +1006,74 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
     // ---- Plex recommended row (single_row + plex_row) --------------------------------------------
 
-    /** single_row: the title gets a soft black edge and a faint panel, so it reads over any wallpaper. */
-    private void styleHeroForRow() {
+    /**
+     * single_row: the title gets a soft black edge and a faint dark box that hugs it, so it reads over
+     * any wallpaper; title_size sets its size. Two lines are allowed for a Plex card's season line.
+     */
+    private void styleHeroForRow(int titleSizeSp) {
+        if (titleSizeSp >= 20) heroName.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, titleSizeSp);
+        heroTextPx = heroName.getTextSize();
         heroName.setShadowLayer(3f * density, 0f, 0f, 0xE6000000);
         android.graphics.drawable.GradientDrawable panel = new android.graphics.drawable.GradientDrawable();
-        panel.setColor(0x1AFFFFFF);
-        panel.setCornerRadius(10 * density);
+        panel.setColor(0x40000000);
+        panel.setCornerRadius(8 * density);
         heroName.setBackground(panel);
-        int ph = (int) (14 * density), pv = (int) (4 * density);
-        heroName.setPadding(ph, pv, ph, pv + (int) (2 * density));
+        int ph = (int) (10 * density);
+        heroName.setPadding(ph, (int) (2 * density), ph, (int) (5 * density));
+        heroName.setSingleLine(false);
+        heroName.setMaxLines(2);
+        heroName.setEllipsize(android.text.TextUtils.TruncateAt.END);
         ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) heroName.getLayoutParams();
         lp.setMarginStart(Math.max(0, lp.getMarginStart() - ph));
         heroName.setLayoutParams(lp);
+        // One line for an app, two for a Plex card: keep the bottom edge on the band either way.
+        heroName.addOnLayoutChangeListener((v, l, tp, r, b, ol, ot, or, ob) -> {
+            if (!Float.isNaN(heroBottom) && (b - tp) != (ob - ot)) v.setY(heroBottom - (b - tp));
+        });
     }
 
-    /** The top shelf title for a Plex card, where the app titles sit. */
-    private void showHeroText(String label) {
-        if (Float.isNaN(heroY)) return;
+    /** Long Plex titles shrink (down to 24sp) to fit the screen instead of ending in an ellipsis. */
+    private void fitHeroText(String label) {
+        if (heroTextPx <= 0) return;
+        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) heroName.getLayoutParams();
+        float room = root.getWidth() - lp.getMarginStart() - heroName.getPaddingLeft() - heroName.getPaddingRight()
+                - 48 * density;
+        float size = heroTextPx, min = 24 * getResources().getDisplayMetrics().scaledDensity;
+        android.text.TextPaint paint = new android.text.TextPaint(heroName.getPaint());
+        paint.setTextSize(size);
+        String first = label.split("\n", 2)[0];
+        while (size > min && paint.measureText(first) > room) {
+            size -= 2 * density;
+            paint.setTextSize(size);
+        }
+    }
+
+    /** The top shelf title for a Plex card, where the app titles sit; the season or episode on a smaller second line. */
+    private void showHeroText(String title, String subtitle) {
+        if (Float.isNaN(heroBottom)) return;
+        String plain = subtitle.isEmpty() ? title : title + "\n" + subtitle;
+        fitHeroText(plain);
+        CharSequence label = plain;
+        if (!subtitle.isEmpty()) {
+            android.text.SpannableString s = new android.text.SpannableString(plain);
+            int from = title.length() + 1;
+            s.setSpan(new android.text.style.RelativeSizeSpan(0.5f), from, plain.length(), 0);
+            int c = heroName.getCurrentTextColor();
+            s.setSpan(new android.text.style.ForegroundColorSpan((0xCC << 24) | (c & 0x00FFFFFF)), from, plain.length(), 0);
+            label = s;
+        }
+        final CharSequence text = label;
         heroName.animate().cancel();
         if (!heroShown || !animations || reducedMotion) {
-            heroName.setText(label);
-            heroName.setY(heroY);
+            heroName.setText(text);
+            heroName.setY(heroBottom - heroName.getHeight());
             heroName.setTranslationX(0f);
             if (animations) heroName.animate().alpha(1f).setDuration(200).start();
             else heroName.setAlpha(1f);
-        } else if (!label.contentEquals(heroName.getText())) {
+        } else if (!plain.contentEquals(heroName.getText().toString())) {
             heroName.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
-                heroName.setText(label);
-                heroName.setY(heroY);
+                heroName.setText(text);
+                heroName.setY(heroBottom - heroName.getHeight());
                 heroName.setTranslationX(12 * density);
                 heroName.animate().alpha(1f).translationX(0f).setDuration(200).start();
             }).start();
@@ -1148,7 +1194,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             hideHero();
             return;
         }
-        showHeroText(it.subtitle.isEmpty() ? it.title : it.title + "  ·  " + it.subtitle);
+        showHeroText(it.title, it.subtitle);
     }
 
     @Override

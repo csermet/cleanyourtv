@@ -119,6 +119,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private final boolean singleRow;
     /** Config.rowTiles (single_row): tiles per screen width, or 0 for dockSize. */
     private final float rowTiles;
+    /** Config.tileGap (single_row): fixed space between tiles in dp; the focus zoom may then touch a neighbour. */
+    private final int tileGapDp;
     /** Dock order (config.xml dock_apps, or a theme's config.json). */
     private final List<String> favourites;
     /** Grid apps fill the dock slots dock_apps leaves free (config.xml, fill_dock). */
@@ -140,6 +142,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         this.dockSize = dockSize;
         this.singleRow = cfg.singleRow;
         this.rowTiles = cfg.rowTiles >= 3 ? cfg.rowTiles : 0f;
+        this.tileGapDp = cfg.tileGap >= 4 ? cfg.tileGap : 0;
         this.favourites = cfg.dockApps;
         this.fillDock = cfg.fillDock;
         this.hidden = new HashSet<>(cfg.hiddenApps);
@@ -247,7 +250,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             // A horizontal list gives each item the row's full width otherwise: one cell per column,
             // or row_tiles cells per screen (fractions allowed) with tiles sized to fit them.
             int cell = rowTiles > 0 ? Math.round(inner / rowTiles) : inner / dockSize;
-            w = tileWidthPx(cell, 1, density);
+            w = tileGapDp > 0 ? Math.min(Math.round(DESIGN_W_DP * density), cell - Math.round(tileGapDp * density))
+                    : tileWidthPx(cell, 1, density);
             h = tileHeightPx(w);
             ViewGroup.LayoutParams lp = v.getLayoutParams();
             lp.width = cell;

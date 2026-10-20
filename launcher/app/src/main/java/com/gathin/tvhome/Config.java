@@ -90,6 +90,10 @@ final class Config {
     final String plexLanIp;
     /** row_tiles: single_row tiles per screen width, fractions allowed (3 to 10); 0 follows columns. */
     final float rowTiles;
+    /** tile_gap: single_row space between tiles in dp (4 to 40); 0 keeps room for the full focus zoom. */
+    final int tileGap;
+    /** title_size: the top shelf title in sp (20 to 60); 0 keeps the layout's size. */
+    final int titleSize;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -103,7 +107,8 @@ final class Config {
                    int[] settingsKeycodes, boolean settingsKeyPanel, Map<Integer, String> appKeys,
                    File wallpaper, boolean overlayApplied, Festival festival, int textColor, boolean singleRow,
                    boolean networkPill, int topButtonsSize, int bandOpacity,
-                   int ambientGlow, boolean plexRow, String plexLanIp, float rowTiles) {
+                   int ambientGlow, boolean plexRow, String plexLanIp, float rowTiles,
+                   int tileGap, int titleSize) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -138,6 +143,8 @@ final class Config {
         this.plexRow = plexRow;
         this.plexLanIp = plexLanIp;
         this.rowTiles = rowTiles;
+        this.tileGap = tileGap;
+        this.titleSize = titleSize;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -227,7 +234,9 @@ final class Config {
                 json == null ? 100 : integer(json, "ambient_glow", 100, 0, 100),
                 json != null && bool(json, "plex_row", false),
                 json == null ? "" : string(json, "plex_lan_ip", ""),
-                json == null ? 0f : (float) Math.max(0, Math.min(10, json.optDouble("row_tiles", 0))));
+                json == null ? 0f : (float) Math.max(0, Math.min(10, json.optDouble("row_tiles", 0))),
+                json == null ? 0 : integer(json, "tile_gap", 0, 0, 40),
+                json == null ? 0 : integer(json, "title_size", 0, 0, 60));
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */

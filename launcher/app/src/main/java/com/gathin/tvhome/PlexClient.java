@@ -41,9 +41,9 @@ final class PlexClient {
     }
 
     static final class Item {
-        final String ratingKey, title, subtitle, image;
-        Item(String ratingKey, String title, String subtitle, String image) {
-            this.ratingKey = ratingKey; this.title = title; this.subtitle = subtitle; this.image = image;
+        final String ratingKey, title, subtitle, image, guid;
+        Item(String ratingKey, String title, String subtitle, String image, String guid) {
+            this.ratingKey = ratingKey; this.title = title; this.subtitle = subtitle; this.image = image; this.guid = guid;
         }
     }
 
@@ -190,18 +190,64 @@ final class PlexClient {
             if (out.size() >= max) break;
             out.add(it);
         }
-        return out;
+        return englishTitles(out);
+    }
+
+    /**
+     * Libraries set to original titles show anime in Japanese; for a matched item (plex:// guid) whose
+     * title is not in Latin letters, ask Plex's online metadata for the English title. Cached per guid.
+     */
+    private List<Item> englishTitles(List<Item> items) {
+        String token = prefs.getString(TOKEN, null);
+        List<Item> res = new ArrayList<>();
+        for (Item it : items) {
+            String title = it.title;
+            if (token != null && !latin(title) && it.guid.startsWith("plex://")) {
+                String en = prefs.getString("en:" + it.guid, null);
+                if (en == null) {
+                    en = fetchEnglishTitle(it.guid, token);
+                    if (en != null) prefs.edit().putString("en:" + it.guid, en).apply();
+                }
+                if (en != null && !en.isEmpty() && latin(en)) title = en;
+            }
+            res.add(new Item(it.ratingKey, title, it.subtitle, it.image, it.guid));
+        }
+        return res;
+    }
+
+    private String fetchEnglishTitle(String guid, String token) {
+        try {
+            String id = guid.substring(guid.lastIndexOf('/') + 1);
+            JSONObject mc = new JSONObject(request("GET",
+                    "https://metadata.provider.plex.tv/library/metadata/" + enc(id) + "?X-Plex-Language=en-US", token))
+                    .optJSONObject("MediaContainer");
+            JSONArray md = mc == null ? null : mc.optJSONArray("Metadata");
+            return md != null && md.length() > 0 ? md.getJSONObject(0).optString("title", "") : "";
+        } catch (Exception e) {
+            return null;   // try again on the next load
+        }
+    }
+
+    /** True when every letter is Latin (digits and punctuation do not count). */
+    static boolean latin(String s) {
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            if (Character.isLetter(cp) && Character.UnicodeScript.of(cp) != Character.UnicodeScript.LATIN) return false;
+            i += Character.charCount(cp);
+        }
+        return true;
     }
 
     private static void add(List<Item> out, Set<String> seen, JSONObject m) {
         String type = m.optString("type");
-        String key, title, sub, image;
+        String key, title, sub, image, guid;
         switch (type) {
             case "episode":
                 key = m.optString("ratingKey");
                 title = m.optString("grandparentTitle", m.optString("title"));
                 sub = "S" + m.optInt("parentIndex") + " · E" + m.optInt("index");
                 image = first(m, "thumb", "grandparentArt", "art");
+                guid = m.optString("grandparentGuid", "");
                 if (!seen.add("show:" + m.optString("grandparentRatingKey", key))) return;
                 break;
             case "season":
@@ -209,6 +255,7 @@ final class PlexClient {
                 title = m.optString("parentTitle", m.optString("title"));
                 sub = m.optString("title");
                 image = first(m, "art", "parentArt", "thumb");
+                guid = m.optString("parentGuid", "");
                 if (!seen.add("show:" + m.optString("parentRatingKey", key))) return;
                 break;
             case "movie":
@@ -217,13 +264,14 @@ final class PlexClient {
                 title = m.optString("title");
                 sub = m.has("year") ? String.valueOf(m.optInt("year")) : "";
                 image = first(m, "art", "thumb");
+                guid = m.optString("guid", "");
                 if (!seen.add(("show".equals(type) ? "show:" : "movie:") + key)) return;
                 break;
             default:
                 return;
         }
         if (key.isEmpty() || title.isEmpty()) return;
-        out.add(new Item(key, title, sub, image));
+        out.add(new Item(key, title, sub, image, guid));
     }
 
     private static String first(JSONObject m, String... keys) {
@@ -299,6 +347,7 @@ final class PlexClient {
             c.setRequestProperty("X-Plex-Platform", "Android");
             c.setRequestProperty("X-Plex-Device", "Android TV");
             c.setRequestProperty("X-Plex-Device-Name", "tvhome launcher");
+            c.setRequestProperty("X-Plex-Language", "en-US");
             if (token != null) c.setRequestProperty("X-Plex-Token", token);
             if ("POST".equals(method)) {
                 c.setDoOutput(true);
