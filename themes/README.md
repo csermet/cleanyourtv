@@ -45,6 +45,9 @@ is ignored, and a file that doesn't parse is ignored as a whole, so a theme can 
 | `sky_intensity` | 0 to 100 | Time-of-day backdrop: a dark gradient that follows the clock, 0 hides it (default) |
 | `wallpaper` | bool | Show `wallpaper.jpg` from the theme folder (`true`), or ignore it (`false`) |
 | _(folder)_ `wallpapers/` | `*.jpg` files | Optional: several pictures that rotate once a day in file-name order (next one on the first Home after midnight); falls back to `wallpaper.jpg` when the folder is missing or empty. Push it yourself next to `config.json` |
+| `live_background` | string | `picture` (default), `video`, `picture_effect` or `video_effect`. Video loops a clip from the theme's `videos/` folder without sound, only while Home is on screen, over the wallpaper (which stays as its poster); the player is released whenever Home is left. Also in Launcher settings, where the choice survives a theme push |
+| _(folder)_ `videos/` | `*.mp4` files | Clips for `live_background` video: one a day in file-name order. 1080p H.264 plays on the hardware decoder of most TVs; darken them like the wallpapers, the UI sits on top. Not used on low-RAM TVs |
+| `live_effect` | string | With an `_effect` background: `sparks` (dark purple electric sparks now and then, upper right), `dust` (slowly drifting light dust) or `both`; needs `animations` |
 | `festival` | string | Turns on a festive skin: the network pill becomes a diya whose flame follows the connection, Inputs a temple bell, Settings a marigold, and the first Home of the day gets a petal shower. `dussehra` and `diwali` have built-in greetings |
 | `festival_until` | `YYYY-MM-DD` | Last day the festive skin shows; it switches itself off after that. A malformed date turns it off |
 | `greeting` | string | Replaces the time-of-day greeting while the festive skin is on |

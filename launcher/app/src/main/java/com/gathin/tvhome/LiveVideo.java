@@ -26,6 +26,8 @@ final class LiveVideo implements TextureView.SurfaceTextureListener {
     /** Home is on screen; shown: a frame of ours is on the view. */
     private boolean wanted, shown;
     private int position;
+    /** Called for each new video frame (LiveEffectView draws along with it), or null. */
+    Runnable onFrame;
 
     LiveVideo(Context ctx, File file, boolean fade) {
         this.file = file;
@@ -122,5 +124,6 @@ final class LiveVideo implements TextureView.SurfaceTextureListener {
 
     @Override
     public void onSurfaceTextureUpdated(SurfaceTexture st) {
+        if (onFrame != null) onFrame.run();
     }
 }

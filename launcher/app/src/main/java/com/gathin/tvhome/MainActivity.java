@@ -238,6 +238,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private java.io.File wallpaperShown;
     /** live_background video over the wallpaper, or null (see LiveVideo). */
     private LiveVideo liveVideo;
+    /** live_effect over the wallpaper or video, or null (see LiveEffectView). */
+    private LiveEffectView liveEffect;
     private boolean festive;
     private DiyaDrawable diya;
     private BellDrawable bell;
@@ -364,6 +366,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             liveVideo = new LiveVideo(this, video, cfg.animations && !cfg.reducedMotion);
             root.addView(liveVideo.view(), root.indexOfChild(wallView) + 1,
                     new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        // live_effect: under the night shade too; it is motion, so not with animations off.
+        if (cfg.liveEffectOn() && wallView != null && nightShade != null && cfg.animations && !cfg.reducedMotion) {
+            liveEffect = new LiveEffectView(this, cfg.liveEffect, density);
+            root.addView(liveEffect, root.indexOfChild(nightShade),
+                    new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            if (liveVideo != null) liveVideo.onFrame = liveEffect::videoFrame;
         }
         sky = findViewById(R.id.sky);
         sky.setIntensity(cfg.skyIntensity);
@@ -750,6 +759,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         rebuildOnResume = false;
         resumed = true;
         if (liveVideo != null) liveVideo.start();
+        if (liveEffect != null) liveEffect.start();
         if (plex != null && (plexFailed || android.os.SystemClock.elapsedRealtime() - plexLoadedAt > PLEX_REFRESH_MS)) loadPlex();
         if (statusFailed) statusAt = Long.MIN_VALUE / 2;
         updateGreeting();
@@ -850,6 +860,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         handler.removeCallbacks(retryFailed);
         resumed = false;
         if (liveVideo != null) liveVideo.stop();
+        if (liveEffect != null) liveEffect.stop();
         if (diya != null) diya.stop();
         // Nothing of ours stays on screen over another app; an undecided prompt simply returns next time.
         if (cardPrompt != null) cardPrompt.dismiss();
