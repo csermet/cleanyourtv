@@ -2281,9 +2281,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         android.graphics.drawable.GradientDrawable panel = new android.graphics.drawable.GradientDrawable();
         panel.setColor(0x40000000);
         panel.setCornerRadius(8 * density);
-        heroName.setBackground(panel);
-        int ph = (int) (10 * density);
-        heroName.setPadding(ph, (int) (2 * density), ph, (int) (5 * density));
+        // The box sits close round the title, as much room above the capitals as below the baseline (~0.3 em):
+        // Outfit's line box has a third of an em above the capitals, so a little of it is cut off.
+        android.graphics.Rect cap = new android.graphics.Rect();
+        heroName.getPaint().getTextBounds("H", 0, 1, cap);   // cap.top is minus the cap height
+        int over = Math.max(0, Math.round(-heroName.getPaint().getFontMetrics().ascent + cap.top - 0.29f * heroTextPx));
+        heroName.setBackground(new android.graphics.drawable.InsetDrawable(panel, 0, over, 0, 0));
+        int ph = (int) (9 * density);
+        heroName.setPadding(ph, 0, ph, (int) (2 * density));
         heroName.setSingleLine(false);
         heroName.setMaxLines(2);
         heroName.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -2296,14 +2301,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         hp.setMarginStart((int) (-24 * density));
         hp.setMarginEnd((int) (-24 * density));
         hp.topMargin = (int) (-12 * density);
+        // The clock, date and notes on the same soft box as the title, as wide as their widest line; the header
+        // moves out by the box's padding so the texts keep their place.
+        View leftBlock = findViewById(R.id.leftBlock);
+        android.graphics.drawable.GradientDrawable leftPanel = new android.graphics.drawable.GradientDrawable();
+        leftPanel.setColor(0x40000000);
+        leftPanel.setCornerRadius(8 * density);
+        leftBlock.setBackground(leftPanel);
+        int bx = (int) (12 * density), by = (int) (8 * density);
+        leftBlock.setPadding(bx, by, bx, by);
+        // RelativeLayout makes a view tied to both sides exactly that wide, wrap_content or not: let go of the pills.
+        android.widget.RelativeLayout.LayoutParams llp = (android.widget.RelativeLayout.LayoutParams) leftBlock.getLayoutParams();
+        llp.removeRule(android.widget.RelativeLayout.START_OF);
+        llp.removeRule(android.widget.RelativeLayout.LEFT_OF);
+        llp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        leftBlock.setLayoutParams(llp);
+        hp.setMarginStart(hp.getMarginStart() - bx);
+        hp.topMargin -= by;
         header.setLayoutParams(hp);
         rebuildHeader(nightCfgOrNull());
+        // A wrap_content LinearLayout leaves match_parent children out of its width (the date was cut short):
+        // the greeting, the clock row, the date column (re-added by rebuildHeader) and its lines wrap their text.
+        for (int id : new int[]{R.id.greeting, R.id.clock, R.id.date, R.id.shamsiDate}) {
+            View v = findViewById(id);
+            if (id != R.id.clock) v.getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            if (id != R.id.greeting) ((View) v.getParent()).getLayoutParams().width = ViewGroup.LayoutParams.WRAP_CONTENT;
+        }
         // The pills sit at the top-right corner instead of on the date line.
         View bar = findViewById(R.id.topButtons);
         android.widget.RelativeLayout.LayoutParams blp = (android.widget.RelativeLayout.LayoutParams) bar.getLayoutParams();
         blp.removeRule(android.widget.RelativeLayout.ALIGN_BOTTOM);
         blp.addRule(android.widget.RelativeLayout.ALIGN_PARENT_TOP);
-        blp.topMargin = (int) (4 * density);
+        blp.topMargin = (int) (4 * density) + by;   // the header moved up by the left box's padding
         blp.bottomMargin = 0;
         blp.setMarginEnd((int) (-10 * density));
         bar.setLayoutParams(blp);
