@@ -5,6 +5,8 @@ MediaTek, 3 GB of RAM), with a moving background, theme sounds and a single-row 
 opt-in through a theme's `config.json`: without these keys the launcher behaves like upstream's at the
 commit this branch was last merged with.
 
+![Home on the TCL 55C728: a picture with drifting dust behind the single row](docs/fork/home.jpg)
+
 **No internet permission.** Pictures, videos and sounds are files you push to the TV; nothing is fetched.
 The APK asks for the same permissions as upstream's plus `WRITE_SETTINGS`, used only by night mode's
 earlier screensaver and only once you grant it over ADB.
