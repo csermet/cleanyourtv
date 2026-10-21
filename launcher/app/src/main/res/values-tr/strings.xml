@@ -85,6 +85,7 @@
     <string name="video_picker_hint">Önizlemek için gez. OK bugün için oynatır; karışık sıra yarın sürer.</string>
     <string name="video_sound">Video sesi</string>
     <string name="video_full_screen">Videoyu tam ekran izle</string>
+    <string name="next_background">Sıradaki video ya da resim</string>
     <string name="live_sparks">Kıvılcım</string>
     <string name="live_dust">Işık tozu</string>
     <string name="live_both">İkisi</string>

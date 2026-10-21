@@ -26,7 +26,7 @@ final class LiveVideo implements TextureView.SurfaceTextureListener {
     private final View dim;
     private final float dimAlpha;
     private boolean sound;
-    final File file;
+    File file;
     private final boolean fade;
     private MediaPlayer player;
     private Surface surface;
@@ -69,6 +69,18 @@ final class LiveVideo implements TextureView.SurfaceTextureListener {
         sound = on;
         if (player != null) player.setVolume(on ? 1f : 0f, on ? 1f : 0f);
     }
+    /** Another clip in place (the Next button): this one fades out, the new one fades in from its start. */
+    void switchTo(File next) {
+        file = next;
+        box.animate().cancel();
+        box.animate().alpha(0f).setDuration(fade ? 250 : 0).withEndAction(() -> {
+            release();
+            position = 0;
+            shown = false;
+            if (wanted && surface != null) open();
+        }).start();
+    }
+
     void start() {
         wanted = true;
         if (surface != null && player == null) open();

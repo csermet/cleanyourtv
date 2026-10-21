@@ -199,6 +199,15 @@
                     android:visibility="gone"
                     android:nextFocusDown="@+id/grid" />
 
+                <!-- The next video or picture of the shuffle, in place; shown with two or more to go through. -->
+                <TextView
+                    android:id="@+id/btnNext"
+                    style="@style/TopIconButton"
+                    android:contentDescription="@string/next_background"
+                    android:drawableStart="@drawable/ic_skip_next"
+                    android:visibility="gone"
+                    android:nextFocusDown="@+id/grid" />
+
                 <TextView
                     android:id="@+id/btnSettings"
                     style="@style/TopButton"

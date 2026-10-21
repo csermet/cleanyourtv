@@ -111,7 +111,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private TextView btnWifi;
     /** live_background video controls next to Settings; fullScreen: only the video, at its own brightness. */
     private TextView btnSound;
-    private View btnFullScreen;
+    private View btnFullScreen, btnNext;
+    private static final java.util.concurrent.ExecutorService WALL_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
     private boolean fullScreen;
     private TextView shamsiDate;
     private boolean shamsi;
@@ -549,6 +550,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         View btnSettings = findViewById(R.id.btnSettings);
         btnSound = findViewById(R.id.btnSound);
         btnFullScreen = findViewById(R.id.btnFullScreen);
+        btnNext = findViewById(R.id.btnNext);
+        // Next: with two or more clips (video) or pictures to go through.
+        int nextCount = liveVideo != null ? WallpaperRotation.videos(Config.dir(this)).length
+                : wallView != null ? WallpaperRotation.list(Config.dir(this)).length : 0;
+        if (nextCount > 1) {
+            btnNext.setVisibility(View.VISIBLE);
+            btnNext.setOnClickListener(v -> nextBackground());
+        }
         if (liveVideo != null) {
             btnSound.setVisibility(View.VISIBLE);
             btnFullScreen.setVisibility(View.VISIBLE);
@@ -591,7 +600,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
                 return true;
             }
             int firstButton = R.id.btnSettings;
-            for (View b : new View[]{btnInputs, btnWifi, btnSound, btnFullScreen}) {
+            for (View b : new View[]{btnInputs, btnWifi, btnSound, btnFullScreen, btnNext}) {
                 if (b.getVisibility() == View.VISIBLE) {
                     firstButton = b.getId();
                     break;
@@ -607,8 +616,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         btnSettings.setOnKeyListener(pillKeys);
         btnSound.setOnKeyListener(pillKeys);
         btnFullScreen.setOnKeyListener(pillKeys);
+        btnNext.setOnKeyListener(pillKeys);
         if (advancedEffects || singleRow) {
-            for (View button : new View[]{btnInputs, btnWifi, btnSound, btnFullScreen, btnSettings}) {
+            for (View button : new View[]{btnInputs, btnWifi, btnSound, btnFullScreen, btnNext, btnSettings}) {
                 button.setOnFocusChangeListener((view, focused) -> view.animate()
                         .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
                         .setDuration(160).start());
@@ -676,28 +686,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
     private void showWallpaper(File file) {
         try {
-            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
-            android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
-            opts.inJustDecodeBounds = true;
-            android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
-            int w = opts.outWidth, h = opts.outHeight;
-            if (w <= 0 || h <= 0) return;
-            int sample = WallpaperSize.sampleSize(w, h, dm.widthPixels, dm.heightPixels);
-            // The limit applies to what is decoded, so a 12 MP photo still works once it is sampled down.
-            if (!WallpaperSize.accepted(w / sample, h / sample)) return;
-            opts.inJustDecodeBounds = false;
-            opts.inSampleSize = sample;
-            int[] scale = WallpaperSize.coverScale(w / sample, h / sample, dm.widthPixels, dm.heightPixels);
-            if (scale != null) {
-                opts.inScaled = true;
-                opts.inDensity = scale[0];
-                opts.inTargetDensity = scale[1];
-            }
-            // Full colour on TVs with RAM to spare (no banding in skies and gradients); RGB_565 halves the
-            // bitmap on low-RAM sets, where it was the upstream default (#166).
-            opts.inPreferredConfig = isLowRam() ? android.graphics.Bitmap.Config.RGB_565
-                    : android.graphics.Bitmap.Config.ARGB_8888;
-            android.graphics.Bitmap bmp = android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
+            android.graphics.Bitmap bmp = decodeWallpaper(file);
             if (bmp == null) return;
             android.widget.ImageView wall = new android.widget.ImageView(this);
             wall.setScaleType(android.widget.ImageView.ScaleType.CENTER_CROP);
@@ -715,6 +704,36 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             }
         } catch (Exception | OutOfMemoryError e) {
             // A bad or huge picture must never take the home screen down; the plain colour stays.
+        }
+    }
+
+    /** The wallpaper decoded at the size CENTER_CROP shows (null when unreadable or over 4K); any thread. */
+    private android.graphics.Bitmap decodeWallpaper(File file) {
+        try {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
+            opts.inJustDecodeBounds = true;
+            android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
+            int w = opts.outWidth, h = opts.outHeight;
+            if (w <= 0 || h <= 0) return null;
+            int sample = WallpaperSize.sampleSize(w, h, dm.widthPixels, dm.heightPixels);
+            // The limit applies to what is decoded, so a 12 MP photo still works once it is sampled down.
+            if (!WallpaperSize.accepted(w / sample, h / sample)) return null;
+            opts.inJustDecodeBounds = false;
+            opts.inSampleSize = sample;
+            int[] scale = WallpaperSize.coverScale(w / sample, h / sample, dm.widthPixels, dm.heightPixels);
+            if (scale != null) {
+                opts.inScaled = true;
+                opts.inDensity = scale[0];
+                opts.inTargetDensity = scale[1];
+            }
+            // Full colour on TVs with RAM to spare (no banding in skies and gradients); RGB_565 halves the
+            // bitmap on low-RAM sets, where it was the upstream default (#166).
+            opts.inPreferredConfig = isLowRam() ? android.graphics.Bitmap.Config.RGB_565
+                    : android.graphics.Bitmap.Config.ARGB_8888;
+            return android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
+        } catch (Exception | OutOfMemoryError e) {
+            return null;
         }
     }
 
@@ -922,6 +941,42 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             cm.unregisterNetworkCallback(networkCallback);
             cm.unregisterNetworkCallback(vpnCallback);
         }
+    }
+
+    /** The next video and picture of the shuffle, in place: Home is not rebuilt. */
+    private void nextBackground() {
+        Config.advanceRotationNow(this);
+        java.io.File pic = Config.currentWallpaper(this);
+        if (pic != null && wallView instanceof android.widget.ImageView && !pic.equals(wallpaperShown)) {
+            wallpaperShown = pic;   // before onResume can see a mismatch and rebuild
+            WALL_EXEC.execute(() -> {
+                android.graphics.Bitmap bmp = decodeWallpaper(pic);
+                runOnUiThread(() -> {
+                    if (bmp != null && pic.equals(wallpaperShown)) crossfadeWallpaper((android.widget.ImageView) wallView, bmp);
+                });
+            });
+        }
+        if (liveVideo != null) {
+            java.io.File clip = Config.currentVideo(this);
+            if (clip != null && !clip.equals(liveVideo.file)) liveVideo.switchTo(clip);
+        }
+    }
+
+    private void crossfadeWallpaper(android.widget.ImageView wall, android.graphics.Bitmap bmp) {
+        android.graphics.drawable.Drawable old = wall.getDrawable();
+        if (old == null || !animations) {
+            wall.setImageBitmap(bmp);
+            return;
+        }
+        android.graphics.drawable.TransitionDrawable t = new android.graphics.drawable.TransitionDrawable(
+                new android.graphics.drawable.Drawable[]{old, new android.graphics.drawable.BitmapDrawable(getResources(), bmp)});
+        t.setCrossFadeEnabled(true);
+        wall.setImageDrawable(t);
+        t.startTransition(500);
+        // Then the new picture alone, so the old bitmap can go.
+        handler.postDelayed(() -> {
+            if (wall.getDrawable() == t) wall.setImageBitmap(bmp);
+        }, 600);
     }
 
     private void setVideoSound(boolean on) {

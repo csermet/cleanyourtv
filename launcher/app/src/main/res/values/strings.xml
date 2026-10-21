@@ -91,6 +91,7 @@
     <string name="video_picker_hint">Move to preview. OK plays it for today; the shuffle carries on tomorrow.</string>
     <string name="video_sound">Video sound</string>
     <string name="video_full_screen">Full screen video</string>
+    <string name="next_background">Next video or picture</string>
     <string name="live_sparks">Sparks</string>
     <string name="live_dust">Dust</string>
     <string name="live_both">Both</string>

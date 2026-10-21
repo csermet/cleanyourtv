@@ -382,6 +382,13 @@ final class Config {
         return true;
     }
 
+    /** The Next button: one step on right away; today's picks give way to the shuffle. */
+    static void advanceRotationNow(Context ctx) {
+        SharedPreferences p = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        p.edit().putLong(ROTATION_STEP, rotationStep(p) + 1).putLong(ROTATION_SINCE, System.currentTimeMillis())
+                .remove(WALLPAPER_PICK_DAY).remove(VIDEO_PICK_DAY).apply();
+    }
+
     /** Due after the hold; also when the clock went back past the last step (set again from the network). */
     static boolean rotationDue(long since, long now) {
         return now < since || now - since >= ROTATION_HOLD_MS;
