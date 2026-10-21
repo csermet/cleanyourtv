@@ -136,10 +136,6 @@ final class Config {
     final int bandOpacity;
     /** ambient_glow: strength of the focused app's colour glow in percent, 0 turns it off (config.xml true = 100). */
     final int ambientGlow;
-    /** plex_row: a smaller second row of Plex recommendations under single_row (theme only). */
-    final boolean plexRow;
-    /** plex_lan_ip: the Plex server's LAN address, for servers whose advertised local address is a container's. */
-    final String plexLanIp;
     /** row_tiles: single_row tiles per screen width, fractions allowed (3 to 10); 0 follows columns. */
     final float rowTiles;
     /** tile_gap: single_row space between tiles in dp (4 to 40); 0 keeps room for the full focus zoom. */
@@ -156,9 +152,6 @@ final class Config {
     final int nightStart, nightEnd;
     /** night_dim: extra darkening of the wallpaper at night in percent; night_screensaver_min: screensaver delay at night. */
     final int nightDim, nightSaverMin;
-    /** status_nodes: [{name, url}] node-exporter /metrics per server; status_usage_url: usage JSON (theme only). */
-    final List<String[]> statusNodes;
-    final String statusUsageUrl;
     /** sounds: theme sounds/ (wake, sleep, launch); sound_volume 0-100 (theme only). */
     final boolean sounds;
     final int soundVolume;
@@ -205,10 +198,10 @@ final class Config {
                    Festival festival, int[] inputKeycodes, List<String> appKeys,
                    List<RaceWeekend.Race> raceCalendar, boolean cinematicHome, int ambientGlow, int homeIdleClockMinutes,
                    int textColor, boolean singleRow, int topButtonsSize, int bandOpacity,
-                   boolean plexRow, String plexLanIp, float rowTiles,
+                   float rowTiles,
                    int tileGap, int titleSize, boolean parallax, boolean openFromTile,
                    boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin,
-                   List<String[]> statusNodes, String statusUsageUrl, boolean sounds, int soundVolume,
+                   boolean sounds, int soundVolume,
                    int wakeDelayS, boolean wakeWaitArc, boolean nightQuietSounds, int soundPrerollMs,
                    int liveBackground, int liveEffect, int liveVideoDim) {
         this.inputKeycodes = inputKeycodes;
@@ -261,8 +254,6 @@ final class Config {
         this.singleRow = singleRow;
         this.topButtonsSize = topButtonsSize;
         this.bandOpacity = bandOpacity;
-        this.plexRow = plexRow;
-        this.plexLanIp = plexLanIp;
         this.rowTiles = rowTiles;
         this.tileGap = tileGap;
         this.titleSize = titleSize;
@@ -273,8 +264,6 @@ final class Config {
         this.nightEnd = nightEnd;
         this.nightDim = nightDim;
         this.nightSaverMin = nightSaverMin;
-        this.statusNodes = statusNodes;
-        this.statusUsageUrl = statusUsageUrl;
         this.sounds = sounds;
         this.soundVolume = soundVolume;
         this.wakeDelayS = wakeDelayS;
@@ -452,8 +441,6 @@ final class Config {
                 json != null && bool(json, "single_row", false),
                 json == null ? 100 : integer(json, "top_buttons_size", 100, 60, 100),
                 json == null ? 100 : integer(json, "band_opacity", 100, 20, 100),
-                json != null && bool(json, "plex_row", false),
-                json == null ? "" : string(json, "plex_lan_ip", ""),
                 json == null ? 0f : (float) Math.max(0, Math.min(10, json.optDouble("row_tiles", 0))),
                 json == null ? 0 : integer(json, "tile_gap", 0, 0, 40),
                 json == null ? 0 : integer(json, "title_size", 0, 0, 60),
@@ -464,7 +451,6 @@ final class Config {
                 json == null ? -1 : clock(string(json, "night_end", "")),
                 json == null ? 35 : integer(json, "night_dim", 35, 0, 90),
                 json == null ? 0 : integer(json, "night_screensaver_min", 0, 0, 60),
-                nodes(json), json == null ? "" : string(json, "status_usage_url", ""),
                 json != null && bool(json, "sounds", false),
                 json == null ? 100 : integer(json, "sound_volume", 100, 0, 100),
                 json == null ? 3 : integer(json, "wake_delay_s", 3, 0, 10),
@@ -661,19 +647,6 @@ final class Config {
     private static boolean bool(JSONObject o, String key, boolean fallback) {
         Object v = o.opt(key);
         return v instanceof Boolean ? (Boolean) v : fallback;
-    }
-
-    private static List<String[]> nodes(JSONObject json) {
-        List<String[]> out = new ArrayList<>();
-        JSONArray a = json == null ? null : json.optJSONArray("status_nodes");
-        if (a == null) return out;
-        for (int i = 0; i < a.length(); i++) {
-            JSONObject o = a.optJSONObject(i);
-            if (o == null) continue;
-            String name = o.optString("name", ""), url = o.optString("url", "");
-            if (!name.isEmpty() && url.startsWith("http")) out.add(new String[]{name, url});
-        }
-        return out;
     }
 
     /** "HH:MM" as minutes of the day, or -1 when it does not parse. */

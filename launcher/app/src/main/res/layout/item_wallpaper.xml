@@ -12,8 +12,8 @@
         android:id="@+id/card"
         android:layout_width="176dp"
         android:layout_height="99dp"
-        android:background="@drawable/plex_card_bg"
-        android:foreground="@drawable/plex_card_focus"
+        android:background="@drawable/picker_card_bg"
+        android:foreground="@drawable/picker_card_focus"
         android:clipToOutline="true"
         android:focusable="true"
         android:clickable="true">

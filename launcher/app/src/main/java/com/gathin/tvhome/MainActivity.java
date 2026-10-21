@@ -90,7 +90,7 @@ import java.util.Set;
 /**
  * tvOS style home: black, a pinned dock row, an app grid, and one glass highlight that springs between tiles.
  */
-public class MainActivity extends Activity implements AppAdapter.TileListener, PlexRowAdapter.Listener {
+public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private static final int LAUNCHER_SETTINGS_REQUEST = 42;
     /** Sent by QuickSettingsActivity: open Launcher settings from here so Home rebuilds when they close. */
@@ -180,28 +180,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private float glassScrollShiftX;
     /** Config.singleRow: one horizontal row, no grid. */
     private boolean singleRow;
-    /** Where the top shelf title last sat, so a Plex card can show its title in the same place. */
-    private float heroY = Float.NaN;
-    /** heroName's own text size in px, restored for app titles after a long Plex title shrank it. */
+    /** heroName's own text size in px (title_size). */
     private float heroTextPx;
     /** single_row: the title's bottom edge, just above the band; its top follows its height. */
     private float heroBottom = Float.NaN;
     /** single_row: the title box has been lined up with the first tile's left edge. */
     private boolean heroAligned;
-    /** single_row + plex_row: the focused row is full size, the other ROW_SMALL; the gap between the bands stays. */
-    private static final float ROW_SMALL = 0.70f;
     /** single_row: the bands reach this far past the column's padding, towards the screen edges; the tiles stay put. */
     private static final float BAND_OUTSET_DP = 16f;
     /** single_row: the rows' side padding; the band is drawn 6dp from the row's edge, so tiles sit ~20dp inside it. */
     private static final float ROW_SIDE_DP = 22f;
-    private static final float ROW_GAP_DP = 12f, PLEX_INNER_TOP_DP = 10f, APPS_INNER_BOTTOM_DP = 80f;
-    private boolean plexFocused;
-    /** 0 = app row focused, 1 = Plex row focused; a spring moves it between the two. */
-    private final androidx.dynamicanimation.animation.FloatValueHolder rowProgress =
-            new androidx.dynamicanimation.animation.FloatValueHolder(0f);
-    private SpringAnimation rowSpring;
-    /** The row without focus is dimmed to this opacity. */
-    private static final float ROW_DIM = 0.65f;
     private boolean parallax, openFromTile;
     private boolean inputsPill = true;
     /** Night mode: the theme's config, and a black layer over the wallpaper at night. */
@@ -215,69 +203,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             else if (Intent.ACTION_SCREEN_OFF.equals(i.getAction())) TvSounds.screenOff(c);
         }
     };
-    /** Header status lines (status_nodes / status_usage_url), refreshed every minute while Home is shown. */
-    private TextView statusNodes, statusUsage;
-    /** The line over the notes and the bar between them: shown only with something to separate. */
-    private View statusRule, statusBar;
-    private final ServerStatus serverStatus = new ServerStatus();
-    private static final java.util.concurrent.ExecutorService STATUS_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
-    /** Every five minutes while Home is shown; a return to Home within that keeps the last values. */
-    private static final long STATUS_EVERY_MS = 5 * 60_000L;
-    private long statusAt = Long.MIN_VALUE / 2;
-    private final Runnable statusTick = new Runnable() {
-        @Override
-        public void run() {
-            long age = android.os.SystemClock.elapsedRealtime() - statusAt;
-            if (age >= STATUS_EVERY_MS) {
-                statusAt = android.os.SystemClock.elapsedRealtime();
-                refreshStatus();
-                age = 0;
-            }
-            handler.postDelayed(this, STATUS_EVERY_MS - age);
-        }
-    };
     private View wallView;
-    private static final float PARALLAX_X_DP = 20f, PARALLAX_Y_DP = 10f, WALL_ZOOM = 1.06f;
+    private static final float PARALLAX_X_DP = 20f, WALL_ZOOM = 1.06f;
     private RowBandDecoration appsBand;
-    private RowBands bands;
-    /** The rows' normal width (the wrapper's); a shrunk row is laid out wider so its tiles still reach the band's end. */
-    private int rowWidth;
-    /** The focused app tile's layout top in root coordinates, for the title above the (scaled) row. */
-    private float appsCardTop = Float.NaN;
-    /** Config.plexRow: the Plex recommended row under the single row; null when off. */
-    private RecyclerView plexRow;
-    private PlexRowAdapter plexAdapter;
-    private PlexClient plex;
-    private long plexLoadedAt = Long.MIN_VALUE / 2;
-    private String plexLanIp = "";
-    private boolean plexLoading;
-    private android.animation.ValueAnimator plexEntrance;
-    private int plexLast;
-    private static final java.util.concurrent.ExecutorService PLEX_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
-    private static final long PLEX_REFRESH_MS = 15 * 60_000L;
-    /**
-     * The Plex row or a status line came back empty: on power-on the TV drops Ethernet and gets it back
-     * some 5 s later, after Home has already asked. Tried again 3 s after each network change, 10 s after
-     * a failure and then every 30 s while Home is shown, six times at most; a success or a network change
-     * starts the count again.
-     */
-    private boolean plexFailed, statusFailed;
-    private int failRetries;
-    private static final long NET_SETTLE_MS = 3_000L, FIRST_RETRY_MS = 10_000L, RETRY_MS = 30_000L;
-    private static final int MAX_RETRIES = 6;
     private boolean resumed;
-    /** Home was stopped by the screen going off: back on, the Plex row and status lines load again (once the network is up). */
+    /** Home was stopped by the screen going off: back on, the video starts muted and the rotation may advance. */
     private boolean stoppedAsleep;
-    private final Runnable retryFailed = new Runnable() {
-        @Override
-        public void run() {
-            if (!resumed || (!plexFailed && !statusFailed) || failRetries >= MAX_RETRIES) return;
-            failRetries++;
-            android.util.Log.i("tvhome-net", "retry " + failRetries + (plexFailed ? " plex" : "") + (statusFailed ? " status" : ""));
-            if (plexFailed) loadPlex();
-            if (statusFailed) restartStatus();
-        }
-    };
     private int glassCardW;   // width of the tile the glass was last fitted to
     private boolean glassShown;
     private final Rect tileRect = new Rect();
@@ -353,7 +284,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         @Override
         public void onAvailable(@NonNull Network network) {
             handler.post(MainActivity.this::updateWifiLabel);
-            handler.post(() -> retrySoon(true));
         }
 
         @Override
@@ -631,8 +561,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         fillDockLeavesSlots = !cfg.fillDock;
         adapter.setSavedOrder(Order.ranks(Order.load(Order.file(this)), dockApps));
         grid.setAdapter(adapter);
-        plexLanIp = cfg.plexLanIp;
-        if (singleRow && cfg.plexRow) setUpPlexRow(cfg.bandOpacity);
 
         // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
         // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
@@ -947,8 +875,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         if (nightCfg != null && nightCfg.sounds) TvSounds.homeShown(this);
         if (stoppedAsleep) {
             stoppedAsleep = false;
-            plexLoadedAt = Long.MIN_VALUE / 2;
-            statusAt = Long.MIN_VALUE / 2;
             // Every power-on starts without the video's sound.
             setVideoSound(false);
             // Turned on after an hour or more with the same picture and video: the next ones (onResume rebuilds).
@@ -994,8 +920,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         resumed = true;
         if (liveVideo != null) liveVideo.start();
         if (liveEffect != null) liveEffect.start();
-        if (plex != null && (plexFailed || android.os.SystemClock.elapsedRealtime() - plexLoadedAt > PLEX_REFRESH_MS)) loadPlex();
-        if (statusFailed) statusAt = Long.MIN_VALUE / 2;
         updateGreeting();
         updateRace();
         // The network and Inputs pills keep their state while Home is in the background, and callbacks update them
@@ -1015,8 +939,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         sky.update();
         if (wallpaperPlayer != null) wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
-        handler.removeCallbacks(statusTick);
-        handler.post(statusTick);
         if (festive && diya != null) {
             diya.start();
             LocalDate today = LocalDate.now();
@@ -1136,8 +1058,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         ambient.animate().cancel();
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
-        handler.removeCallbacks(statusTick);
-        handler.removeCallbacks(retryFailed);
         resumed = false;
         setFullScreen(false);
         if (liveVideo != null) liveVideo.stop();
@@ -1601,7 +1521,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     @Override
     public void onTileFocused(int position, View card) {
         lastFocused = position;
-        setRowFocus(false);
         updateParallax();
         lastFocusedKey = adapter.keyAt(position);
         // Focus restored before the first layout (cold start): the tile has no size yet, and the glass
@@ -1622,7 +1541,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         float h = card.getHeight() * scale + 2 * pad;
         float x = r.exactCenterX() - w / 2f;
         float y = r.exactCenterY() - h / 2f - (advancedEffects ? 4f * density : 0f);
-        if (singleRow && grid.getTranslationY() != 0f) y += grid.getTranslationY();   // the row is shifted (plex_row)
 
         ViewGroup.LayoutParams lp = glass.getLayoutParams();
         if (lp.width != (int) w || lp.height != (int) h || card.getWidth() != glassCardW) {
@@ -1703,14 +1621,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
         if (singleRow) {
-            appsCardTop = dockTopInRoot;
-            heroBottom = appsRowTopVisual() - 12 * density;
+            heroBottom = dockTopInRoot - 12 * density;
             alignHeroWithFirstTile();
         }
         float y = singleRow ? heroBottom - hero.getHeight()
                 : dockTopInRoot - 14 * density - 26 * density - hero.getHeight();
-        heroY = y;
-        if (heroTextPx > 0 && heroName.getTextSize() != heroTextPx) heroName.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, heroTextPx);
         boolean changed = !label.contentEquals(heroName.getText());
         if (cinematic) showHeroArt(position);
 
@@ -2207,10 +2122,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
                 return GridNavigation.atHorizontalEdge(position, count, Math.max(1, count),
                         rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
             }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && plexRow != null && plexRow.getVisibility() == View.VISIBLE) {
-                focusPlex();
-                return true;
-            }
             return keyCode != KeyEvent.KEYCODE_DPAD_UP;
         }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
@@ -2268,11 +2179,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         return true;
     }
 
-    // ---- Plex recommended row (single_row + plex_row) --------------------------------------------
+    // ---- single_row title and header --------------------------------------------------------------
 
     /**
      * single_row: the title gets a soft black edge and a faint dark box that hugs it, so it reads over
-     * any wallpaper; title_size sets its size. Two lines are allowed for a Plex card's season line.
+     * any wallpaper; title_size sets its size. A long name may take two lines.
      */
     private void styleHeroForRow(int titleSizeSp) {
         if (titleSizeSp >= 20) heroName.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, titleSizeSp);
@@ -2301,7 +2212,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         hp.setMarginStart((int) (-24 * density));
         hp.setMarginEnd((int) (-24 * density));
         hp.topMargin = (int) (-12 * density);
-        // The clock, date and notes on the same soft box as the title, as wide as their widest line; the header
+        // The clock and date on the same soft box as the title, as wide as their widest line; the header
         // moves out by the box's padding so the texts keep their place.
         View leftBlock = findViewById(R.id.leftBlock);
         android.graphics.drawable.GradientDrawable leftPanel = new android.graphics.drawable.GradientDrawable();
@@ -2340,7 +2251,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         ViewGroup column = (ViewGroup) header.getParent();
         column.setClipToPadding(false);
         column.setClipChildren(false);
-        // One line for an app, two for a Plex card: keep the bottom edge on the band either way.
+        // One line or two (a long name): keep the bottom edge on the band either way.
         hero.addOnLayoutChangeListener((v, l, tp, r, b, ol, ot, or, ob) -> {
             if (!Float.isNaN(heroBottom) && (b - tp) != (ob - ot)) v.setY(heroBottom - (b - tp));
         });
@@ -2368,8 +2279,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private Config nightCfgOrNull() { return pendingHeaderCfg; }
 
     /**
-     * single_row: the date moves under the clock ("20 October Tuesday"), then a thin line, then the
-     * status lines when the theme names servers or a usage endpoint.
+     * single_row: the date moves under the clock ("20 October Tuesday").
      */
     private void rebuildHeader(Config cfg) {
         TextView clock = findViewById(R.id.clock);
@@ -2393,538 +2303,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         }
         date.setAllCaps(false);
         date.setTextSize(16f);
-        boolean status = cfg != null && (!cfg.statusNodes.isEmpty() || !cfg.statusUsageUrl.isEmpty());
-        if (!status) return;
-        int accent = cfg.textColor != 0 ? cfg.textColor : 0xFFFFFFFF;
-        View rule = new View(this);
-        statusRule = rule;
-        rule.setVisibility(View.GONE);
-        rule.setBackgroundColor((0x55 << 24) | (accent & 0x00FFFFFF));
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams((int) (300 * density), Math.max(1, (int) density));
-        rlp.topMargin = (int) (8 * density);
-        rlp.bottomMargin = (int) (6 * density);
-        rlp.setMarginStart((int) (2 * density));
-        left.addView(rule, at++, rlp);
-        // Two small columns, like notes: "AI" (usage windows) | "Tech" (servers).
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.HORIZONTAL);
-        statusUsage = statusLine(accent);
-        statusNodes = statusLine(accent);
-        // Nothing until the first answer: no placeholder text, no empty line.
-        statusUsage.setVisibility(View.GONE);
-        statusNodes.setVisibility(View.GONE);
-        View bar = new View(this);
-        statusBar = bar;
-        bar.setVisibility(View.GONE);
-        bar.setBackgroundColor((0x55 << 24) | (accent & 0x00FFFFFF));
-        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(Math.max(1, (int) density), ViewGroup.LayoutParams.MATCH_PARENT);
-        blp.setMarginStart((int) (14 * density));
-        blp.setMarginEnd((int) (14 * density));
-        box.addView(statusUsage);
-        box.addView(bar, blp);
-        box.addView(statusNodes);
-        left.addView(box, at, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        // The line is as long as the notes under it.
-        box.addOnLayoutChangeListener((v, l, tp, r, b, ol, ot, or, ob) -> {
-            int w = r - l;
-            if (w > 0 && rule.getLayoutParams().width != w) {
-                rule.getLayoutParams().width = w;
-                rule.requestLayout();
-            }
-        });
-    }
-
-    private TextView statusLine(int accent) {
-        TextView v = new TextView(this);
-        v.setTextSize(11f);
-        v.setTextColor((0xB3 << 24) | (accent & 0x00FFFFFF));
-        v.setTypeface(androidx.core.content.res.ResourcesCompat.getFont(this, R.font.outfit_light));
-        v.setLineSpacing(0f, 1.1f);
-        v.setPadding((int) (2 * density), 0, 0, 0);
-        v.setShadowLayer(2f * density, 0f, 0f, 0x99000000);
-        return v;
-    }
-
-    /** Reads the servers and the usage endpoint off the main thread; CPU needs a second read 3 s later at first. */
-    private void refreshStatus() {
-        Config cfg = nightCfg;
-        if (cfg == null || (statusNodes == null && statusUsage == null)) return;
-        STATUS_EXEC.execute(() -> {
-            boolean primed = cfg.statusNodes.isEmpty();
-            String nodes = cfg.statusNodes.isEmpty() ? "" : serverStatus.nodesLine(cfg.statusNodes);
-            if (nodes.contains("…")) {
-                try { Thread.sleep(3000); } catch (InterruptedException e) { return; }
-                nodes = serverStatus.nodesLine(cfg.statusNodes);
-            }
-            final boolean nodesFailed = !cfg.statusNodes.isEmpty() && serverStatus.unreachable > 0;
-            String usage = cfg.statusUsageUrl.isEmpty() ? "" : ServerStatus.usageLine(cfg.statusUsageUrl);
-            final boolean usageFailed = usage == null;
-            final String n = nodes, u = usage == null ? "" : usage;
-            runOnUiThread(() -> {
-                statusFailed = nodesFailed || usageFailed;
-                retrySoon(false);
-                // Not one answer (no network yet after power-on): the last values stay.
-                if (!(n.isEmpty() && nodesFailed)) setStatus(statusNodes, n.isEmpty() ? "" : "Tech  (cpu · ram · temp)\n" + n);
-                if (!usageFailed) setStatus(statusUsage, u.isEmpty() ? "" : "AI\n" + u);
-            });
-        });
-    }
-
-    /** A note column: hidden while it has nothing to say, faded in when it first does. */
-    private void setStatus(TextView v, String text) {
-        if (v == null) return;
-        v.setText(text);
-        fadeVisible(v, !text.isEmpty());
-        boolean usage = statusUsage != null && statusUsage.getVisibility() == View.VISIBLE;
-        boolean nodes = statusNodes != null && statusNodes.getVisibility() == View.VISIBLE;
-        if (statusRule != null) fadeVisible(statusRule, usage || nodes);
-        if (statusBar != null) fadeVisible(statusBar, usage && nodes);
-    }
-
-    private void fadeVisible(View v, boolean show) {
-        if (!show) {
-            v.animate().cancel();
-            v.setVisibility(View.GONE);
-            return;
-        }
-        if (v.getVisibility() == View.VISIBLE) return;
-        v.setVisibility(View.VISIBLE);
-        if (!animations) return;
-        v.setAlpha(0f);
-        v.animate().alpha(1f).setDuration(reducedMotion ? 150 : 350).start();
-    }
-
-    /** The status lines now, then every five minutes again. */
-    private void restartStatus() {
-        statusAt = Long.MIN_VALUE / 2;
-        handler.removeCallbacks(statusTick);
-        if (resumed) handler.post(statusTick);
-    }
-
-    /** Another try at whatever failed; after a network change the retry count starts over. */
-    private void retrySoon(boolean networkChanged) {
-        if (!plexFailed && !statusFailed) {
-            failRetries = 0;
-            return;
-        }
-        if (networkChanged) failRetries = 0;
-        handler.removeCallbacks(retryFailed);
-        long delay = networkChanged ? NET_SETTLE_MS : failRetries == 0 ? FIRST_RETRY_MS : RETRY_MS;
-        if (resumed) handler.postDelayed(retryFailed, delay);
-    }
-
-    /** Long Plex titles shrink (down to 24sp) to fit the screen instead of ending in an ellipsis. */
-    private void fitHeroText(String label) {
-        if (heroTextPx <= 0) return;
-        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams) hero.getLayoutParams();
-        float room = root.getWidth() - lp.getMarginStart() - heroName.getPaddingLeft() - heroName.getPaddingRight()
-                - 48 * density;
-        float size = heroTextPx, min = 24 * getResources().getDisplayMetrics().scaledDensity;
-        android.text.TextPaint paint = new android.text.TextPaint(heroName.getPaint());
-        paint.setTextSize(size);
-        String first = label.split("\n", 2)[0];
-        while (size > min && paint.measureText(first) > room) {
-            size -= 2 * density;
-            paint.setTextSize(size);
-        }
-    }
-
-    /** The top shelf title for a Plex card, where the app titles sit; the season or episode on a smaller second line. */
-    private void showHeroText(String title, String subtitle) {
-        if (Float.isNaN(heroBottom)) return;
-        String plain = subtitle.isEmpty() ? title : title + "\n" + subtitle;
-        fitHeroText(plain);
-        CharSequence label = plain;
-        if (!subtitle.isEmpty()) {
-            android.text.SpannableString s = new android.text.SpannableString(plain);
-            int from = title.length() + 1;
-            s.setSpan(new android.text.style.RelativeSizeSpan(0.5f), from, plain.length(), 0);
-            int c = heroName.getCurrentTextColor();
-            s.setSpan(new android.text.style.ForegroundColorSpan((0xCC << 24) | (c & 0x00FFFFFF)), from, plain.length(), 0);
-            label = s;
-        }
-        final CharSequence text = label;
-        hero.animate().cancel();
-        if (!heroShown || !animations || reducedMotion) {
-            heroName.setText(text);
-            hero.setY(heroBottom - hero.getHeight());
-            hero.setTranslationX(0f);
-            if (animations) hero.animate().alpha(1f).setDuration(200).start();
-            else hero.setAlpha(1f);
-        } else if (!plain.contentEquals(heroName.getText().toString())) {
-            hero.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
-                heroName.setText(text);
-                hero.setY(heroBottom - hero.getHeight());
-                hero.setTranslationX(12 * density);
-                hero.animate().alpha(1f).translationX(0f).setDuration(200).start();
-            }).start();
-        }
-        heroShown = true;
-    }
-
-    private void setUpPlexRow(int bandOpacity) {
-        plex = new PlexClient(this);
-        plexAdapter = new PlexRowAdapter(plex, this);
-        plexRow = new RecyclerView(this);
-        plexRow.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, rtlAppGrid));
-        plexRow.setAdapter(plexAdapter);
-        plexRow.setItemAnimator(null);
-        plexRow.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        RowBandDecoration plexBand = new RowBandDecoration(density, bandOpacity);
-        plexBand.draw = false;
-        plexRow.addItemDecoration(plexBand);
-        if (appsBand != null) appsBand.draw = false;
-        int side = (int) (ROW_SIDE_DP * density);
-        plexRow.setPadding(side, (int) (8 * density), side, (int) (16 * density));
-        plexRow.setClipToPadding(true);
-        plexRow.setVisibility(View.GONE);
-        ViewGroup wrap = (ViewGroup) grid.getParent();
-        wrap.addView(plexRow, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
-        bands = new RowBands(this, density, bandOpacity, grid, plexRow);
-        wrap.addView(bands, 0, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-        View.OnLayoutChangeListener redraw = (v, l, tp, r, b, ol, ot, or, ob) -> bands.invalidate();
-        grid.addOnLayoutChangeListener(redraw);
-        plexRow.addOnLayoutChangeListener(redraw);
-        wrap.post(() -> {
-            rowWidth = wrap.getWidth();
-            bands.setNormalWidth(rowWidth);
-            // About six cards on screen: the cut-off one says the row scrolls on.
-            plexAdapter.setSize(wrap.getWidth() - 2 * side, 5.6f, density);
-            loadPlex();
-        });
-    }
-
-    private void loadPlex() {
-        if (plex == null || plexLoading || !plex.linked()) return;
-        plexLoading = true;
-        PLEX_EXEC.execute(() -> {
-            List<PlexClient.Item> got = null;
-            for (int attempt = 0; attempt < 2 && got == null; attempt++) {
-                try {
-                    if (!plex.hasServer() && !plex.discover(plexLanIp)) {
-                        android.util.Log.w("tvhome-plex", "no reachable server");
-                        break;
-                    }
-                    got = plex.recommended(20);
-                    android.util.Log.i("tvhome-plex", "loaded " + got.size() + " items from " + plex.serverName());
-                } catch (Exception e) {
-                    // Never the token: request() errors carry only the HTTP status or the host. A stored
-                    // address that stopped answering is forgotten and looked up once more right away.
-                    android.util.Log.w("tvhome-plex", "load failed: " + e.getClass().getSimpleName());
-                    plex.forgetServer();
-                }
-            }
-            final List<PlexClient.Item> items = got;
-            runOnUiThread(() -> {
-                plexLoading = false;
-                plexLoadedAt = android.os.SystemClock.elapsedRealtime();
-                plexFailed = items == null;
-                retrySoon(false);
-                showPlexItems(items);
-            });
-        });
-    }
-
-    private void showPlexItems(List<PlexClient.Item> items) {
-        if (plexRow == null) return;
-        // A failed refresh keeps the cards: on power-on the network is back only seconds after Home asks.
-        if (items == null && plexRow.getVisibility() == View.VISIBLE) return;
-        FrameLayout.LayoutParams glp = (FrameLayout.LayoutParams) grid.getLayoutParams();
-        if (items == null || items.isEmpty()) {
-            if (plexRow.hasFocus()) focusTile(lastFocused);
-            plexRow.setVisibility(View.GONE);
-            setRowWide(grid, false);
-            applyRows(1f, 1f);
-            grid.setAlpha(1f);
-            glp.bottomMargin = 0;
-            grid.setLayoutParams(glp);
-            return;
-        }
-        final boolean slideIn = plexRow.getVisibility() != View.VISIBLE && animations && !reducedMotion
-                && grid.getHeight() > 0;
-        final float appsBottom = grid.getBottom() + grid.getTranslationY();
-        plexAdapter.setItems(items);
-        if (slideIn) {
-            plexRow.setAlpha(0f);
-            bands.setShown(plexRow, 0f);
-            // Off at once, not faded: the row is about to move under them. Both come back on its tile.
-            glass.animate().cancel();
-            glass.setAlpha(0f);
-            glassShown = false;
-            hideHero();
-            hero.animate().cancel();
-            hero.setAlpha(0f);
-        }
-        plexRow.setVisibility(View.VISIBLE);
-        plexRow.post(() -> {
-            // The app row sits just above the Plex band; the tiles' hidden label space is taken back.
-            glp.bottomMargin = Math.max(0, plexRow.getHeight() - (int) (78 * density));
-            grid.setLayoutParams(glp);
-            if (slideIn) {
-                // In the frame of the new layout, before it is drawn: the app row never shows in its new place early.
-                grid.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
-                    @Override
-                    public boolean onPreDraw() {
-                        grid.getViewTreeObserver().removeOnPreDrawListener(this);
-                        placeRows();
-                        slidePlexIn(appsBottom);
-                        return true;
-                    }
-                });
-                return;
-            }
-            // The app row moved up: once it is laid out there, put the highlight and title back on its tile.
-            grid.post(() -> grid.post(() -> {
-                placeRows();
-                if (grid.hasFocus()) focusTile(lastFocused);
-            }));
-        });
-    }
-
-    /** Widths, scales and shifts for the focused row, with both rows laid out. */
-    private void placeRows() {
-        setRowWide(plexFocused ? grid : plexRow, true);
-        setRowWide(plexFocused ? plexRow : grid, false);
-        rowProgress.setValue(plexFocused ? 1f : 0f);
-        applyProgress(plexFocused ? 1f : 0f);
-    }
-
-    /** The first Plex cards: the app row slides up from where it stood alone and the Plex row rises in under it. */
-    private void slidePlexIn(float appsBottomBefore) {
-        final float appsTy = grid.getTranslationY();
-        final float appsFrom = appsBottomBefore - grid.getBottom() - appsTy;
-        final float plexAlpha = plexRow.getAlpha(), rise = 40 * density;
-        grid.setTranslationY(appsTy + appsFrom);
-        plexRow.setTranslationY(rise);
-        plexRow.setAlpha(0f);
-        bands.setShown(plexRow, 0f);
-        plexEntrance = android.animation.ValueAnimator.ofFloat(1f, 0f);
-        plexEntrance.setDuration(520);
-        plexEntrance.setInterpolator(new android.view.animation.DecelerateInterpolator(1.8f));
-        plexEntrance.addUpdateListener(a -> {
-            float f = (float) a.getAnimatedValue();
-            grid.setTranslationY(appsTy + appsFrom * f);
-            plexRow.setTranslationY(rise * f);
-            plexRow.setAlpha(plexAlpha * (1f - f));
-            bands.setShown(plexRow, 1f - f);
-        });
-        plexEntrance.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(android.animation.Animator a) {
-                // Also after a cancel (focus moved to a row): everything goes to where the rows really are.
-                plexEntrance = null;
-                plexRow.setTranslationY(0f);
-                bands.setShown(plexRow, 1f);
-                applyProgress(rowProgress.getValue());
-                if (grid.hasFocus()) focusTile(lastFocused);
-            }
-        });
-        plexEntrance.start();
-    }
-
-    /** A shrunk row is laid out 1/ROW_SMALL wider, so at its small scale it still spans the band. */
-    private void setRowWide(RecyclerView row, boolean wide) {
-        if (row == null || rowWidth <= 0) return;
-        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) row.getLayoutParams();
-        int want = wide ? (int) Math.ceil(rowWidth / ROW_SMALL) + 2 : ViewGroup.LayoutParams.MATCH_PARENT;
-        if (lp.width != want) {
-            lp.width = want;
-            row.setLayoutParams(lp);
-        }
-    }
-
-    /** Tiles end at the band's inner edge (the normal right padding), at any scale and layout width. */
-    private void clipRow(RecyclerView row, float s) {
-        if (row == null || rowWidth <= 0 || row.getHeight() <= 0) return;
-        float px = row.getPaddingLeft();
-        int right = Math.round(px + (rowWidth - row.getPaddingRight() - px) / s);
-        row.setClipBounds(new Rect(row.getPaddingLeft(), 0, right, row.getHeight()));
-    }
-
-    /** The focused app tile's top on screen, with the app row's current scale and shift. */
-    private float appsRowTopVisual() {
-        if (Float.isNaN(appsCardTop)) return Float.NaN;
-        float bottom = gridBottomInRoot() + grid.getTranslationY();
-        return bottom - grid.getScaleY() * (gridBottomInRoot() - appsCardTop);
-    }
-
-    private float gridBottomInRoot() {
-        Rect r = new Rect(0, 0, grid.getWidth(), grid.getHeight());
-        root.offsetDescendantRectToMyCoords(grid, r);
-        return r.bottom;
-    }
-
-    private void setRowFocus(boolean plex) {
-        if (plexRow == null || plexRow.getVisibility() != View.VISIBLE || plex == plexFocused) return;
-        if (plexEntrance != null) plexEntrance.cancel();
-        plexFocused = plex;
-        setRowWide(plex ? grid : plexRow, true);
-        float target = plex ? 1f : 0f;
-        if (!animations || reducedMotion) {
-            if (rowSpring != null) rowSpring.cancel();
-            rowProgress.setValue(target);
-            applyProgress(target);
-            setRowWide(plex ? plexRow : grid, false);
-            if (!plex) focusTile(lastFocused);
-            return;
-        }
-        if (rowSpring == null) {
-            // A soft spring like the highlight's: the rows overshoot a touch and settle.
-            rowSpring = new SpringAnimation(rowProgress);
-            rowSpring.setSpring(new SpringForce().setStiffness(420f).setDampingRatio(0.78f));
-            rowSpring.setMinimumVisibleChange(0.002f);
-            rowSpring.addUpdateListener((anim, value, velocity) -> applyProgress(value));
-            rowSpring.addEndListener((anim, canceled, value, velocity) -> {
-                if (canceled) return;
-                setRowWide(plexFocused ? plexRow : grid, false);
-                // Snap the highlight onto the full-size tile once the row has settled.
-                if (!plexFocused && grid.hasFocus()) focusTile(lastFocused);
-            });
-        }
-        rowSpring.animateToFinalPosition(target);
-    }
-
-    /** Both rows' scale and opacity for a progress between app row (0) and Plex row (1). */
-    private void applyProgress(float p) {
-        float sa = 1f - (1f - ROW_SMALL) * p, sp = ROW_SMALL + (1f - ROW_SMALL) * p;
-        applyRows(Math.max(ROW_SMALL * 0.97f, sa), Math.max(ROW_SMALL * 0.97f, sp));
-        float q = Math.max(0f, Math.min(1f, p));
-        grid.setAlpha(1f - (1f - ROW_DIM) * q);
-        if (plexRow != null) plexRow.setAlpha(ROW_DIM + (1f - ROW_DIM) * q);
     }
 
     /** The wallpaper drifts against the focus, bounded by the zoom margin: never past an edge. */
     private void updateParallax() {
         if (!parallax || wallView == null) return;
-        int pos, n;
-        if (plexFocused && plexAdapter != null) {
-            pos = plexLast;
-            n = plexAdapter.getItemCount();
-        } else {
-            pos = lastFocused;
-            n = adapter.getItemCount();
-        }
-        float frac = n > 1 ? Math.max(0f, Math.min(1f, pos / (float) (n - 1))) : 0.5f;
+        int n = adapter.getItemCount();
+        float frac = n > 1 ? Math.max(0f, Math.min(1f, lastFocused / (float) (n - 1))) : 0.5f;
         float tx = (0.5f - frac) * 2f * PARALLAX_X_DP * density;
-        float ty = plexFocused ? -PARALLAX_Y_DP * density : 0f;
         if (!animations || reducedMotion) {
             wallView.setTranslationX(tx);
-            wallView.setTranslationY(ty);
             return;
         }
-        wallView.animate().translationX(tx).translationY(ty).setDuration(700)
+        wallView.animate().translationX(tx).setDuration(700)
                 .setInterpolator(new android.view.animation.DecelerateInterpolator(1.6f)).start();
-    }
-
-    /**
-     * Scales both rows about their first tile's left edge and their bottom, then shifts the app row so
-     * its band ends ROW_GAP_DP above the Plex band's top, whatever the two scales are: the rows never
-     * touch, and a small Plex row lets the app row sit lower.
-     */
-    private void applyRows(float sa, float sp) {
-        if (plexRow == null) return;
-        grid.setPivotX(grid.getPaddingLeft());
-        grid.setPivotY(grid.getHeight());
-        plexRow.setPivotX(plexRow.getPaddingLeft());
-        plexRow.setPivotY(plexRow.getHeight());
-        grid.setScaleX(sa);
-        grid.setScaleY(sa);
-        plexRow.setScaleX(sp);
-        plexRow.setScaleY(sp);
-        clipRow(grid, sa);
-        clipRow(plexRow, sp);
-        if (bands != null) bands.invalidate();
-        float plexTop = plexRow.getBottom() - sp * plexRow.getHeight();
-        float plexBandTop = plexTop + sp * PLEX_INNER_TOP_DP * density;
-        float ty = plexBandTop - ROW_GAP_DP * density + sa * APPS_INNER_BOTTOM_DP * density - grid.getBottom();
-        if (plexRow.getVisibility() != View.VISIBLE) ty = 0f;
-        float dy = ty - grid.getTranslationY();
-        grid.setTranslationY(ty);
-        if (glassShown && dy != 0f) {
-            glassTargetY += dy;
-            glassScrollShift += dy;
-            glass.setTranslationY(glass.getTranslationY() + dy);
-        }
-        float top = appsRowTopVisual();
-        if (!Float.isNaN(top) && heroShown) {
-            heroBottom = top - 12 * density;
-            hero.setY(heroBottom - hero.getHeight());
-        }
-    }
-
-    private void focusPlex() {
-        int pos = Math.max(0, Math.min(plexLast, plexAdapter.getItemCount() - 1));
-        RecyclerView.ViewHolder vh = plexRow.findViewHolderForAdapterPosition(pos);
-        if (vh != null) {
-            vh.itemView.findViewById(R.id.card).requestFocus();
-            return;
-        }
-        plexRow.scrollToPosition(pos);
-        plexRow.post(() -> {
-            RecyclerView.ViewHolder h = plexRow.findViewHolderForAdapterPosition(pos);
-            View target = h != null ? h.itemView.findViewById(R.id.card)
-                    : plexRow.getChildCount() > 0 ? plexRow.getChildAt(0).findViewById(R.id.card) : null;
-            if (target != null) target.requestFocus();
-        });
-    }
-
-    @Override
-    public void onPlexClick(PlexClient.Item item, View from) {
-        TvSounds.launch(this);
-        // The season you are in (or the film's page), looked up on the server first: a quick LAN call.
-        PLEX_EXEC.execute(() -> {
-            String url = plex.watchUrl(item);
-            runOnUiThread(() -> {
-                if (url != null) {
-                    Intent page = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                            .setPackage(PlexClient.PLEX_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    try {
-                        if (openFromTile && from.isAttachedToWindow() && from.getWidth() > 0) {
-                            startActivity(page, android.app.ActivityOptions.makeScaleUpAnimation(
-                                    from, 0, 0, from.getWidth(), from.getHeight()).toBundle());
-                        } else {
-                            startActivity(page);
-                        }
-                        return;
-                    } catch (ActivityNotFoundException ignored) {
-                    }
-                }
-                Intent app = getPackageManager().getLeanbackLaunchIntentForPackage(PlexClient.PLEX_PACKAGE);
-                if (app != null) open(app);
-            });
-        });
-    }
-
-    @Override
-    public void onPlexFocused(int position) {
-        plexLast = position;
-        setRowFocus(true);
-        updateParallax();
-        hideGlass();
-        PlexClient.Item it = plexAdapter.itemAt(position);
-        if (it == null) {
-            hideHero();
-            return;
-        }
-        showHeroText(it.title, it.subtitle);
-    }
-
-    @Override
-    public boolean onPlexKey(int position, int keyCode) {
-        switch (keyCode) {
-            case KeyEvent.KEYCODE_DPAD_UP:
-                focusTile(lastFocused);
-                return true;
-            case KeyEvent.KEYCODE_DPAD_DOWN:
-                return true;
-            case KeyEvent.KEYCODE_DPAD_LEFT:
-                return position == 0;
-            case KeyEvent.KEYCODE_DPAD_RIGHT:
-                return position == plexAdapter.getItemCount() - 1;
-            default:
-                return false;
-        }
     }
 
     @Override public void onLibraryFocused() {

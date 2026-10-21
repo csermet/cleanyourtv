@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Plain http is allowed for the theme's own LAN endpoints (status_nodes / status_usage_url:
-     node-exporter metrics and a usage JSON); plex.tv and the Plex server use https. -->
-<network-security-config>
-    <base-config cleartextTrafficPermitted="true" />
-</network-security-config>

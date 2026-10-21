@@ -134,12 +134,10 @@ public final class LauncherSettingsActivity extends Activity {
             Toast.makeText(this, R.string.order_reset_done, Toast.LENGTH_SHORT).show();
         });
         setUpLiveBackground(config);
-        setUpPlex();
         loadBackground();
         refresh();
         // Open at the top: the first visible row of the first section has focus.
         View first = wallpaperChoice.getVisibility() == View.VISIBLE ? wallpaperChoice
-                : findViewById(R.id.plexChoice).getVisibility() == View.VISIBLE ? findViewById(R.id.plexChoice)
                 : findViewById(R.id.showHiddenChoice);
         first.requestFocus();
     }
@@ -224,69 +222,6 @@ public final class LauncherSettingsActivity extends Activity {
                 new Intent(this, WallpaperPickerActivity.class).putExtra(WallpaperPickerActivity.EXTRA_VIDEOS, true), PICK_VIDEO));
     }
 
-    // ---- Plex (plex_row) ------------------------------------------------------------------------
-
-    private PlexClient plex;
-
-    private void setUpPlex() {
-        boolean on = Config.load(this).plexRow;
-        int vis = on ? View.VISIBLE : View.GONE;
-        findViewById(R.id.plexHeader).setVisibility(vis);
-        findViewById(R.id.plexChoice).setVisibility(vis);
-        findViewById(R.id.plexHint).setVisibility(vis);
-        if (!on) return;
-        plex = new PlexClient(this);
-        findViewById(R.id.plexChoice).setOnClickListener(v -> {
-            if (plex.linked()) {
-                new AlertDialog.Builder(this)
-                        .setTitle(R.string.plex_disconnect_q)
-                        .setPositiveButton(R.string.plex_disconnect, (d, w) -> {
-                            plex.unlink();
-                            setResult(RESULT_OK);
-                            refresh();
-                        })
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show();
-            } else {
-                linkPlex();
-            }
-        });
-    }
-
-    /** plex.tv/link: show the code, poll until the owner enters it (10 minutes at most), then find the server. */
-    private void linkPlex() {
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.section_plex)
-                .setMessage(R.string.plex_link_wait)
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-        new Thread(() -> {
-            try {
-                PlexClient.Pin pin = plex.createPin();
-                runOnUiThread(() -> dialog.setMessage(getString(R.string.plex_link_code, pin.code)));
-                long end = System.currentTimeMillis() + 10 * 60_000L;
-                while (System.currentTimeMillis() < end) {
-                    Thread.sleep(2500);
-                    if (isFinishing() || !dialog.isShowing()) return;
-                    if (plex.checkPin(pin.id)) {
-                        boolean server = plex.discover(Config.load(this).plexLanIp);
-                        runOnUiThread(() -> {
-                            dialog.dismiss();
-                            Toast.makeText(this, server ? R.string.plex_link_done : R.string.plex_no_server,
-                                    Toast.LENGTH_LONG).show();
-                            setResult(RESULT_OK);
-                            refresh();
-                        });
-                        return;
-                    }
-                }
-                runOnUiThread(dialog::dismiss);
-            } catch (Exception e) {
-                runOnUiThread(() -> dialog.setMessage(getString(R.string.plex_link_error)));
-            }
-        }).start();
-    }
-
     private void reverseRow(TextView[] views) {
         LinearLayout row = (LinearLayout) views[0].getParent();
         row.removeAllViews();
@@ -332,11 +267,6 @@ public final class LauncherSettingsActivity extends Activity {
                     getString(picked ? R.string.wallpaper_today : R.string.wallpaper_daily)));
         }
         ((TextView) findViewById(R.id.showHiddenChoice)).setText(getString(R.string.show_hidden, TileOrder.hidden(this).size()));
-        if (plex != null) {
-            ((TextView) findViewById(R.id.plexChoice)).setText(plex.linked()
-                    ? getString(R.string.plex_connected, plex.hasServer() ? plex.serverName() : "-")
-                    : getString(R.string.plex_connect));
-        }
         if (wallpaperChoice != null && wallpaperChoice.getVisibility() == View.VISIBLE) {
             File now = Config.currentWallpaper(this);
             boolean picked = choices.getLong(Config.WALLPAPER_PICK_DAY, Long.MIN_VALUE) == LocalDate.now().toEpochDay()

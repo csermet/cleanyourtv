@@ -69,10 +69,6 @@
             </LinearLayout>
             <TextView android:id="@+id/liveHint" style="@style/SettingsHint" />
 
-            <TextView android:id="@+id/plexHeader" style="@style/SettingsHeader" android:text="@string/section_plex" />
-            <TextView android:id="@+id/plexChoice" style="@style/SettingsRow" />
-            <TextView android:id="@+id/plexHint" style="@style/SettingsHint" android:text="@string/plex_hint" />
-
             <TextView style="@style/SettingsHeader" android:text="@string/section_apps" />
             <TextView android:id="@+id/showHiddenChoice" style="@style/SettingsRow" />
             <TextView android:id="@+id/resetOrderChoice" style="@style/SettingsRow"
