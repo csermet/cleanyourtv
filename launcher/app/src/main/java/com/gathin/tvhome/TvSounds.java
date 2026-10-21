@@ -173,8 +173,8 @@ final class TvSounds {
     private static boolean hasArc(AudioDeviceInfo[] devices) {
         if (devices == null) return false;
         for (AudioDeviceInfo d : devices) {
-            // 29 = AudioDeviceInfo.TYPE_HDMI_EARC (API 31).
-            if (d.isSink() && (d.getType() == AudioDeviceInfo.TYPE_HDMI_ARC || d.getType() == 29)) return true;
+            // TYPE_HDMI_EARC is API 31, but only a constant (29): on older TVs no device has that type.
+            if (d.isSink() && (d.getType() == AudioDeviceInfo.TYPE_HDMI_ARC || d.getType() == AudioDeviceInfo.TYPE_HDMI_EARC)) return true;
         }
         return false;
     }

@@ -11,7 +11,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Only for night mode's earlier screensaver (theme night_screensaver_min); granted over adb with
          appops set com.gathin.tvhome WRITE_SETTINGS allow. Without it night mode only dims. -->
-    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Needed since Android 10 to read the Wi-Fi network name for the network pill. Never requested at

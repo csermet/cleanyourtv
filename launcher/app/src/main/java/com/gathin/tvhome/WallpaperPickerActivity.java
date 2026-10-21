@@ -122,7 +122,14 @@ public final class WallpaperPickerActivity extends Activity {
             r.setDataSource(f.getPath());
             String ms = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION);
             long at = ms == null ? 0 : Long.parseLong(ms) * 1000 / 4;
-            return r.getScaledFrameAtTime(at, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, maxWidth, maxWidth * 9 / 16);
+            if (android.os.Build.VERSION.SDK_INT >= 27) {
+                return r.getScaledFrameAtTime(at, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, maxWidth, maxWidth * 9 / 16);
+            }
+            Bitmap full = r.getFrameAtTime(at, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+            if (full == null || full.getWidth() <= maxWidth) return full;
+            Bitmap small = Bitmap.createScaledBitmap(full, maxWidth, full.getHeight() * maxWidth / full.getWidth(), true);
+            if (small != full) full.recycle();
+            return small;
         } catch (Exception | OutOfMemoryError e) {
             return null;
         } finally {
