@@ -331,6 +331,31 @@
                     android:drawableStart="@drawable/ic_swap_vert"
                     android:nextFocusDown="@+id/grid" />
 
+                <!-- live_background video, mirrored for Hebrew: next, full screen, sound; shown only while a clip is set. -->
+                <TextView
+                    android:id="@+id/btnNext"
+                    style="@style/TopIconButton"
+                    android:contentDescription="@string/next_background"
+                    android:drawableStart="@drawable/ic_skip_next"
+                    android:visibility="gone"
+                    android:nextFocusDown="@+id/grid" />
+
+                <TextView
+                    android:id="@+id/btnFullScreen"
+                    style="@style/TopIconButton"
+                    android:contentDescription="@string/video_full_screen"
+                    android:drawableStart="@drawable/ic_fullscreen"
+                    android:visibility="gone"
+                    android:nextFocusDown="@+id/grid" />
+
+                <TextView
+                    android:id="@+id/btnSound"
+                    style="@style/TopIconButton"
+                    android:contentDescription="@string/video_sound"
+                    android:drawableStart="@drawable/ic_volume_off"
+                    android:visibility="gone"
+                    android:nextFocusDown="@+id/grid" />
+
                 <TextView
                     android:id="@+id/btnWifi"
                     style="@style/TopButton"
