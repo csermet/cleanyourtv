@@ -252,11 +252,15 @@ final class PlexClient {
     /**
      * The item's page in the Plex app (watch.plex.tv opens even while Plex is still starting): a film's
      * page, or for a show the season you are in, from the server's On Deck episode, else the first
-     * season with unwatched episodes, else the card's own season. Null when there is no slug.
+     * season with unwatched episodes, else the card's own season. Null when there is no slug, or when
+     * watch.plex.tv has no page for it (then the card opens the Plex app itself).
      */
     String watchUrl(Item it) {
         if (it.slug.isEmpty()) return null;
-        if ("movie".equals(it.type)) return "https://watch.plex.tv/movie/" + it.slug;
+        if ("movie".equals(it.type)) {
+            String film = "https://watch.plex.tv/movie/" + it.slug;
+            return pageExists(film) ? film : null;   // null: the Plex app's own Home, not an error page
+        }
         int season = 0;
         if (!it.showKey.isEmpty()) {
             try {
@@ -279,7 +283,9 @@ final class PlexClient {
             }
         }
         if (season == 0) season = it.season;
-        return pageFor("https://watch.plex.tv/show/" + it.slug, season, this::pageExists);
+        String show = "https://watch.plex.tv/show/" + it.slug;
+        String page = pageFor(show, season, this::pageExists);
+        return page.equals(show) && !pageExists(show) ? null : page;
     }
 
     /**
