@@ -1,11 +1,19 @@
 package com.gathin.tvhome;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 public class PlexClientTest {
+    @Test public void seasonPageOnlyWhenItExists() {
+        String show = "https://watch.plex.tv/show/the-ramparts-of-ice";
+        assertEquals(show + "/season/1", PlexClient.pageFor(show, 1, u -> true));
+        assertEquals(show, PlexClient.pageFor(show, 2, u -> false));
+        assertEquals(show, PlexClient.pageFor(show, 0, u -> { throw new AssertionError("no lookup without a season"); }));
+    }
+
     @Test public void latinTitles() {
         assertTrue(PlexClient.latin("Reincarnated as a Sword"));
         assertTrue(PlexClient.latin("86: Eighty-Six · S2"));

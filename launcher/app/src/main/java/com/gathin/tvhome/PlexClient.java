@@ -279,7 +279,52 @@ final class PlexClient {
             }
         }
         if (season == 0) season = it.season;
-        return "https://watch.plex.tv/show/" + it.slug + (season > 0 ? "/season/" + season : "");
+        return pageFor("https://watch.plex.tv/show/" + it.slug, season, this::pageExists);
+    }
+
+    /**
+     * The season's page when watch.plex.tv has it, else the show's. Plex's online metadata can lag the
+     * library by a season, or number it differently (an anime season listed as a show of its own); the
+     * Plex app opens such a season page as "Something's Not Right".
+     */
+    static String pageFor(String show, int season, java.util.function.Predicate<String> exists) {
+        if (season <= 0) return show;
+        String page = show + "/season/" + season;
+        return exists.test(page) ? page : show;
+    }
+
+    private static final long PAGE_FOUND = -1L, PAGE_RECHECK_MS = 24 * 60 * 60_000L;
+
+    /**
+     * A HEAD request to the public page. Cached: a page that exists for good, a missing one for a day (the
+     * new season shows up online later). Offline, slow or anything but 404 counts as there.
+     */
+    private boolean pageExists(String url) {
+        String key = "page:" + url;
+        long seen = prefs.getLong(key, 0);
+        if (seen == PAGE_FOUND) return true;
+        if (seen > 0 && System.currentTimeMillis() - seen < PAGE_RECHECK_MS) return false;
+        HttpURLConnection c = null;
+        try {
+            c = (HttpURLConnection) new URL(url).openConnection();
+            c.setRequestMethod("HEAD");
+            c.setConnectTimeout(2500);
+            c.setReadTimeout(2500);
+            int code = c.getResponseCode();
+            if (code / 100 == 2) {
+                prefs.edit().putLong(key, PAGE_FOUND).apply();
+                return true;
+            }
+            if (code == 404) {
+                prefs.edit().putLong(key, System.currentTimeMillis()).apply();
+                return false;
+            }
+            return true;
+        } catch (IOException e) {
+            return true;
+        } finally {
+            if (c != null) c.disconnect();
+        }
     }
 
     /** True when every letter is Latin (digits and punctuation do not count). */
