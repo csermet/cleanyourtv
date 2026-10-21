@@ -596,9 +596,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
                 return true;
             }
         });
-        ((GridLayoutManager) grid.getLayoutManager()).setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
-            @Override public int getSpanSize(int position) { return adapter != null && adapter.isLibraryAt(position) ? COLUMNS : 1; }
-        });
+        // single_row lays the apps out with a LinearLayoutManager: no spans there.
+        if (grid.getLayoutManager() instanceof GridLayoutManager) {
+            ((GridLayoutManager) grid.getLayoutManager()).setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                @Override public int getSpanSize(int position) { return adapter != null && adapter.isLibraryAt(position) ? COLUMNS : 1; }
+            });
+        }
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
         // Tiles that scroll out while one is carried come back from the view cache without a rebind; set their
@@ -1535,7 +1538,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
      * afterwards if the moved tile itself ends up off screen.
      */
     private void keepScroll(Runnable change) {
-        GridLayoutManager lm = (GridLayoutManager) grid.getLayoutManager();
+        LinearLayoutManager lm = (LinearLayoutManager) grid.getLayoutManager();   // a GridLayoutManager but in single_row
         int first = lm.findFirstVisibleItemPosition();
         View firstView = first != RecyclerView.NO_POSITION ? lm.findViewByPosition(first) : null;
         int offset = firstView != null ? lm.getDecoratedTop(firstView) - grid.getPaddingTop() : 0;
