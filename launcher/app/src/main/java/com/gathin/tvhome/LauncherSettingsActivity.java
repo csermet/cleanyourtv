@@ -20,6 +20,7 @@ import java.util.Random;
 public final class LauncherSettingsActivity extends Activity {
     private SharedPreferences choices;
     private final TextView[] columnChoices = new TextView[4];
+    private final TextView[] rowChoices = new TextView[4];
     private TextView animationsChoice;
     private TextView advancedChoice;
     private TextView followThemeChoice;
@@ -29,6 +30,7 @@ public final class LauncherSettingsActivity extends Activity {
     private int liveBackground, liveEffect;
     private boolean hasVideos;
     private int columns;
+    private int rowsBelowDock;
     private boolean animations;
     private boolean advancedEffects;
 
@@ -39,6 +41,7 @@ public final class LauncherSettingsActivity extends Activity {
         choices = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE);
         Config config = Config.load(this);
         columns = config.columns;
+        rowsBelowDock = config.rowsBelowDock;
         animations = config.animations;
         advancedEffects = config.animations && config.advancedEffects;
 
@@ -54,12 +57,23 @@ public final class LauncherSettingsActivity extends Activity {
                 refresh();
             });
         }
+        int[] rowIds = {R.id.rows0, R.id.rows1, R.id.rows2, R.id.rows3};
+        for (int i = 0; i < rowIds.length; i++) {
+            final int value = i;
+            rowChoices[i] = findViewById(rowIds[i]);
+            rowChoices[i].setOnClickListener(v -> {
+                if (rowsBelowDock == value) return;
+                rowsBelowDock = value;
+                choices.edit().putInt(Config.ROWS_BELOW_DOCK_KEY, value).apply();
+                setResult(RESULT_OK);
+                refresh();
+            });
+        }
         // Keep the numeric choices increasing in the Hebrew reading direction. Reorder the
         // actual views so D-pad focus follows their positions without changing the saved values.
         if (getResources().getBoolean(R.bool.rtl_app_grid)) {
-            LinearLayout row = (LinearLayout) columnChoices[0].getParent();
-            row.removeAllViews();
-            for (int i = columnChoices.length - 1; i >= 0; i--) row.addView(columnChoices[i]);
+            reverseRow(columnChoices);
+            reverseRow(rowChoices);
         }
         animationsChoice = findViewById(R.id.animationsChoice);
         animationsChoice.setOnClickListener(v -> {
@@ -86,9 +100,11 @@ public final class LauncherSettingsActivity extends Activity {
         followThemeChoice = findViewById(R.id.followThemeChoice);
         followThemeChoice.setOnClickListener(v -> {
             if (!hasOnTvChoices()) return;
-            choices.edit().remove("columns").remove("animations").remove("advanced_effects").commit();
+            choices.edit().remove("columns").remove(Config.ROWS_BELOW_DOCK_KEY).remove("animations")
+                    .remove("advanced_effects").remove(Config.WALLPAPER_CHOICE_KEY).commit();
             Config current = Config.load(this);
             columns = current.columns;
+            rowsBelowDock = current.rowsBelowDock;
             animations = current.animations;
             advancedEffects = current.animations && current.advancedEffects;
             setResult(RESULT_OK);
@@ -271,6 +287,12 @@ public final class LauncherSettingsActivity extends Activity {
         }).start();
     }
 
+    private void reverseRow(TextView[] views) {
+        LinearLayout row = (LinearLayout) views[0].getParent();
+        row.removeAllViews();
+        for (int i = views.length - 1; i >= 0; i--) row.addView(views[i]);
+    }
+
     private void setAdvanced(boolean enabled) {
         advancedEffects = enabled;
         choices.edit().putBoolean("advanced_effects", enabled).apply();
@@ -281,6 +303,9 @@ public final class LauncherSettingsActivity extends Activity {
     private void refresh() {
         for (int i = 0; i < columnChoices.length; i++) {
             columnChoices[i].setSelected(columns == i + 4);
+        }
+        for (int i = 0; i < rowChoices.length; i++) {
+            rowChoices[i].setSelected(rowsBelowDock == i);
         }
         animationsChoice.setText(getString(R.string.animations_state,
                 getString(animations ? R.string.on : R.string.off)));
@@ -316,15 +341,16 @@ public final class LauncherSettingsActivity extends Activity {
             File now = Config.currentWallpaper(this);
             boolean picked = choices.getLong(Config.WALLPAPER_PICK_DAY, Long.MIN_VALUE) == LocalDate.now().toEpochDay()
                     && now != null && now.getName().equals(choices.getString(Config.WALLPAPER_PICK, null));
-            wallpaperChoice.setText(getString(R.string.wallpaper_state,
+            wallpaperChoice.setText(getString(R.string.wallpaper_state_pick,
                     now == null ? "-" : WallpaperRotation.label(now),
                     getString(picked ? R.string.wallpaper_today : R.string.wallpaper_daily)));
         }
     }
 
     private boolean hasOnTvChoices() {
-        return choices.contains("columns") || choices.contains("animations")
-                || choices.contains("advanced_effects");
+        return choices.contains("columns") || choices.contains(Config.ROWS_BELOW_DOCK_KEY)
+                || choices.contains("animations") || choices.contains("advanced_effects")
+                || choices.contains(Config.WALLPAPER_CHOICE_KEY);
     }
 
     private void open(Intent intent) {
