@@ -37,6 +37,14 @@ final class Config {
     /** Launcher settings: the wallpapers/ file the owner picked, and the day (LocalDate.toEpochDay) it is for. */
     static final String WALLPAPER_PICK = "wallpaper_pick";
     static final String WALLPAPER_PICK_DAY = "wallpaper_pick_day";
+    static final String VIDEO_PICK = "video_pick", VIDEO_PICK_DAY = "video_pick_day";
+    /**
+     * Pictures and videos move on together, one step at a time: when the TV is turned on and the same ones
+     * have been up for an hour or more (advanceRotation). The step starts at today's date, so an upgrade
+     * keeps today's picture.
+     */
+    static final String ROTATION_STEP = "rotation_step", ROTATION_SINCE = "rotation_since";
+    static final long ROTATION_HOLD_MS = 60 * 60_000L;
     static final String SETTINGS_NAME = "launcher_settings";
     /** live_background: the picture alone, a video from the theme's videos/ folder, or either with an effect over it. */
     static final int LIVE_PICTURE = 0, LIVE_VIDEO = 1, LIVE_PICTURE_EFFECT = 2, LIVE_VIDEO_EFFECT = 3;
@@ -128,6 +136,8 @@ final class Config {
     final int soundPrerollMs;
     /** live_background / live_effect (theme default, then the owner's pick); see LIVE_* and EFFECT_*. */
     final int liveBackground, liveEffect;
+    /** live_video_dim: black over the video behind the UI, in percent (0-90, default 45); none in full screen. */
+    final int liveVideoDim;
     /** Whether the overlay file was present and parsed. */
     final boolean overlayApplied;
     /** Festive skin from a theme (festival, festival_until, greeting, accent_color); {@link Festival#NONE} if none. */
@@ -146,7 +156,7 @@ final class Config {
                    boolean inputsPill, int nightStart, int nightEnd, int nightDim, int nightSaverMin,
                    List<String[]> statusNodes, String statusUsageUrl, boolean sounds, int soundVolume,
                    int wakeDelayS, boolean wakeWaitArc, boolean nightQuietSounds, int soundPrerollMs,
-                   int liveBackground, int liveEffect) {
+                   int liveBackground, int liveEffect, int liveVideoDim) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.fillDock = fillDock;
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
@@ -200,6 +210,7 @@ final class Config {
         this.soundPrerollMs = soundPrerollMs;
         this.liveBackground = liveBackground;
         this.liveEffect = liveEffect;
+        this.liveVideoDim = liveVideoDim;
     }
 
     /** The folder the theme tools push into; null when external storage is unavailable. */
@@ -307,7 +318,8 @@ final class Config {
                 json != null && bool(json, "night_quiet_sounds", false),
                 json == null ? 600 : integer(json, "sound_preroll_ms", 600, 0, 3000),
                 pick(choices, LIVE_BACKGROUND, named(json == null ? "" : string(json, LIVE_BACKGROUND, ""), LIVE_NAMES), LIVE_NAMES.length),
-                pick(choices, LIVE_EFFECT, named(json == null ? "" : string(json, LIVE_EFFECT, ""), EFFECT_NAMES), EFFECT_NAMES.length));
+                pick(choices, LIVE_EFFECT, named(json == null ? "" : string(json, LIVE_EFFECT, ""), EFFECT_NAMES), EFFECT_NAMES.length),
+                json == null ? 45 : integer(json, "live_video_dim", 45, 0, 90));
     }
 
     /** A theme value's position in names ("video" -> 1); 0, the first, for anything else. */
@@ -329,10 +341,16 @@ final class Config {
 
     boolean liveEffectOn() { return liveBackground == LIVE_PICTURE_EFFECT || liveBackground == LIVE_VIDEO_EFFECT; }
 
-    /** Today's video from the theme's videos/ folder (daily, in file-name order), or null when there is none. */
+    /** The video from the theme's videos/ folder: the owner's pick for today, else the shuffle; null when there is none. */
     static File currentVideo(Context ctx) {
         File[] list = WallpaperRotation.videos(dir(ctx));
-        return list.length == 0 ? null : list[WallpaperRotation.index(java.time.LocalDate.now().toEpochDay(), list.length)];
+        if (list.length == 0) return null;
+        SharedPreferences p = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        if (p.getLong(VIDEO_PICK_DAY, Long.MIN_VALUE) == java.time.LocalDate.now().toEpochDay()) {
+            String pick = p.getString(VIDEO_PICK, null);
+            for (File f : list) if (f.getName().equals(pick)) return f;
+        }
+        return list[WallpaperRotation.index(rotationStep(p), list.length)];
     }
 
     /** Today's wallpaper: the owner's pick for today (Launcher settings), else the daily shuffle. */
@@ -344,7 +362,29 @@ final class Config {
         SharedPreferences p = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
         long today = java.time.LocalDate.now().toEpochDay();
         String pick = p.getLong(WALLPAPER_PICK_DAY, Long.MIN_VALUE) == today ? p.getString(WALLPAPER_PICK, null) : null;
-        return WallpaperRotation.pick(dir, WALLPAPER_NAME, today, pick);
+        return WallpaperRotation.pick(dir, WALLPAPER_NAME, rotationStep(p), pick);
+    }
+
+    static long rotationStep(SharedPreferences p) {
+        return p.getLong(ROTATION_STEP, java.time.LocalDate.now().toEpochDay());
+    }
+
+    /** Power-on: one step on when the same picture and video have been up for ROTATION_HOLD_MS; true if it moved. */
+    static boolean advanceRotation(Context ctx) {
+        SharedPreferences p = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
+        long now = System.currentTimeMillis(), since = p.getLong(ROTATION_SINCE, 0);
+        if (since == 0) {
+            p.edit().putLong(ROTATION_STEP, rotationStep(p)).putLong(ROTATION_SINCE, now).apply();
+            return false;
+        }
+        if (!rotationDue(since, now)) return false;
+        p.edit().putLong(ROTATION_STEP, rotationStep(p) + 1).putLong(ROTATION_SINCE, now).apply();
+        return true;
+    }
+
+    /** Due after the hold; also when the clock went back past the last step (set again from the network). */
+    static boolean rotationDue(long since, long now) {
+        return now < since || now - since >= ROTATION_HOLD_MS;
     }
 
     private static void syncThemeChoices(SharedPreferences choices, File dir, File config) {

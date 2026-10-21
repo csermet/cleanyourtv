@@ -54,6 +54,7 @@
                 <TextView android:id="@+id/livePictureEffect" style="@style/SettingsSegment" android:text="@string/live_picture_effect" />
                 <TextView android:id="@+id/liveVideoEffect" style="@style/SettingsSegment" android:text="@string/live_video_effect" />
             </LinearLayout>
+            <TextView android:id="@+id/liveVideoChoice" style="@style/SettingsRow" android:layout_marginTop="12dp" />
             <TextView android:id="@+id/liveEffectLabel" style="@style/SettingsLabel"
                 android:layout_marginTop="16dp" android:text="@string/live_effect_label" />
             <LinearLayout

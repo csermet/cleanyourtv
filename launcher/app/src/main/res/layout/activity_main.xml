@@ -182,6 +182,23 @@
                     android:drawableStart="@drawable/ic_wifi"
                     android:nextFocusDown="@+id/grid" />
 
+                <!-- live_background video: sound on/off and full screen; shown only while a clip is set. -->
+                <TextView
+                    android:id="@+id/btnSound"
+                    style="@style/TopIconButton"
+                    android:contentDescription="@string/video_sound"
+                    android:drawableStart="@drawable/ic_volume_off"
+                    android:visibility="gone"
+                    android:nextFocusDown="@+id/grid" />
+
+                <TextView
+                    android:id="@+id/btnFullScreen"
+                    style="@style/TopIconButton"
+                    android:contentDescription="@string/video_full_screen"
+                    android:drawableStart="@drawable/ic_fullscreen"
+                    android:visibility="gone"
+                    android:nextFocusDown="@+id/grid" />
+
                 <TextView
                     android:id="@+id/btnSettings"
                     style="@style/TopButton"

@@ -25,11 +25,15 @@ import java.util.concurrent.Executors;
 
 /**
  * Pick today's wallpaper with a live preview: the focused card's picture fills the screen. OK picks it
- * for today (the daily shuffle carries on tomorrow); the first card shuffles to another picture.
+ * for today (the shuffle carries on tomorrow); the first card shuffles to another picture. With
+ * EXTRA_VIDEOS the same for the live_background clips, each shown by a still from a quarter of the way in.
  */
 public final class WallpaperPickerActivity extends Activity {
+    static final String EXTRA_VIDEOS = "videos";
+    private boolean videos;
     private final ExecutorService loader = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
+    /** The pictures, or the clips with EXTRA_VIDEOS. */
     private File[] pictures;
     private File current;
     private ImageView preview;
@@ -39,8 +43,13 @@ public final class WallpaperPickerActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         setContentView(R.layout.activity_wallpaper_picker);
-        pictures = WallpaperRotation.list(Config.dir(this));
-        current = Config.currentWallpaper(this);
+        videos = getIntent().getBooleanExtra(EXTRA_VIDEOS, false);
+        pictures = videos ? WallpaperRotation.videos(Config.dir(this)) : WallpaperRotation.list(Config.dir(this));
+        current = videos ? Config.currentVideo(this) : Config.currentWallpaper(this);
+        if (videos) {
+            ((TextView) findViewById(R.id.pickerTitle)).setText(R.string.video_picker_title);
+            ((TextView) findViewById(R.id.pickerHint)).setText(R.string.video_picker_hint);
+        }
         preview = findViewById(R.id.preview);
         showPreview(current);
         RecyclerView thumbs = findViewById(R.id.thumbs);
@@ -65,8 +74,8 @@ public final class WallpaperPickerActivity extends Activity {
 
     private void pick(File f) {
         SharedPreferences choices = getSharedPreferences(Config.SETTINGS_NAME, MODE_PRIVATE);
-        choices.edit().putString(Config.WALLPAPER_PICK, f.getName())
-                .putLong(Config.WALLPAPER_PICK_DAY, LocalDate.now().toEpochDay()).apply();
+        choices.edit().putString(videos ? Config.VIDEO_PICK : Config.WALLPAPER_PICK, f.getName())
+                .putLong(videos ? Config.VIDEO_PICK_DAY : Config.WALLPAPER_PICK_DAY, LocalDate.now().toEpochDay()).apply();
         setResult(RESULT_OK);
         finish();
     }
@@ -90,7 +99,8 @@ public final class WallpaperPickerActivity extends Activity {
         });
     }
 
-    private static Bitmap decode(File f, int maxWidth) {
+    private Bitmap decode(File f, int maxWidth) {
+        if (videos) return still(f, maxWidth);
         try {
             BitmapFactory.Options o = new BitmapFactory.Options();
             o.inJustDecodeBounds = true;
@@ -102,6 +112,24 @@ public final class WallpaperPickerActivity extends Activity {
             return BitmapFactory.decodeFile(f.getPath(), o);
         } catch (OutOfMemoryError e) {
             return null;
+        }
+    }
+
+    /** A frame a quarter of the way into the clip (the first ones are often a black fade-in), maxWidth wide. */
+    private static Bitmap still(File f, int maxWidth) {
+        android.media.MediaMetadataRetriever r = new android.media.MediaMetadataRetriever();
+        try {
+            r.setDataSource(f.getPath());
+            String ms = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION);
+            long at = ms == null ? 0 : Long.parseLong(ms) * 1000 / 4;
+            return r.getScaledFrameAtTime(at, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, maxWidth, maxWidth * 9 / 16);
+        } catch (Exception | OutOfMemoryError e) {
+            return null;
+        } finally {
+            try {
+                r.release();
+            } catch (Exception ignored) {
+            }
         }
     }
 

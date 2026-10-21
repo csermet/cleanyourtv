@@ -19,8 +19,8 @@ import java.util.Random;
 /**
  * live_effect, over the wallpaper (picture or video) and under the night shade: dark purple electric sparks
  * now and then, slowly drifting light dust, or both. Drawn at about 30 frames a second while Home is on
- * screen; sparks alone draw nothing between bursts. The sparks keep to the upper right, away from the
- * header and the rows.
+ * screen; sparks alone draw nothing between bursts. A burst is two or three long, forked bolts far apart in
+ * the upper part of the screen, never over the header (top left) or the rows.
  */
 final class LiveEffectView extends View {
     private final boolean sparks, dust;
@@ -60,17 +60,28 @@ final class LiveEffectView extends View {
     private boolean dustPlaced;
 
     // ---- sparks --------------------------------------------------------------------------------
-    /** A burst: three flashes over BURST_MS, each a freshly broken path between the same two points. */
-    private static final long BURST_MS = 360;
+    /** Each bolt flashes three times over FLASH_MS, a freshly broken path each time; chips fly for CHIP_MS. */
+    private static final long FLASH_MS = 360, CHIP_MS = 810;
     private static final long[] FLASH_ON = {0, 130, 260}, FLASH_OFF = {80, 210, 360};
-    private final Paint glow = stroke(0xFF4B1FA8, 9f, 70), mid = stroke(0xFF6E3BD8, 3.5f, 150), core = stroke(0xFFA27BFF, 1.3f, 220);
-    private final Path bolt = new Path();
-    private float ax, ay, bx, by;
-    private long burstStart = Long.MIN_VALUE / 2, nextBurst;
-    private int flashDrawn = -1;
-    private static final int CHIPS = 9;
-    private final float[] cx = new float[CHIPS], cy = new float[CHIPS], cvx = new float[CHIPS], cvy = new float[CHIPS];
+    /** Bursts come every 2.5 to 5 s. */
+    private static final int BURST_EVERY_MS = 2500, BURST_SPREAD_MS = 2500;
+    private final Paint glow = stroke(0xFF4B1FA8, 5f), mid = stroke(0xFF6E3BD8, 1.8f), core = stroke(0xFFA27BFF, 0.8f);
     private final Paint chipPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Bolt[] bolts = {new Bolt(), new Bolt(), new Bolt()};
+    private int boltCount;
+    /** Nothing of a bolt goes below this: the app title and rows start not far under it. */
+    private float floor;
+    private long burstStart = Long.MIN_VALUE / 2, burstLength, nextBurst;
+
+    /** One bolt of a burst: its ends, its delay after the burst starts, its path and the chips off its ends. */
+    private static final class Bolt {
+        float ax, ay, bx, by;
+        long delay;
+        int flashDrawn = -1;
+        final Path main = new Path(), forks = new Path();
+        static final int CHIPS = 6;
+        final float[] cx = new float[CHIPS], cy = new float[CHIPS], cvx = new float[CHIPS], cvy = new float[CHIPS];
+    }
 
     LiveEffectView(Context ctx, int effect, float density) {
         super(ctx);
@@ -90,13 +101,12 @@ final class LiveEffectView extends View {
         nextBurst = SystemClock.uptimeMillis() + 1500;
     }
 
-    private Paint stroke(int color, float widthDp, int alpha) {
+    private Paint stroke(int color, float widthDp) {
         Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
         p.setStyle(Paint.Style.STROKE);
         p.setStrokeCap(Paint.Cap.ROUND);
         p.setStrokeJoin(Paint.Join.ROUND);
         p.setColor(color);
-        p.setAlpha(alpha);
         p.setStrokeWidth(widthDp * getResources().getDisplayMetrics().density);
         return p;
     }
@@ -123,7 +133,7 @@ final class LiveEffectView extends View {
     }
 
     private boolean burstActive(long now) {
-        return sparks && (now - burstStart < BURST_MS + 450 || now >= nextBurst);
+        return sparks && (now - burstStart < burstLength || now >= nextBurst);
     }
 
     @Override
@@ -166,85 +176,138 @@ final class LiveEffectView extends View {
     }
 
     private void drawSparks(Canvas c, int w, int h, long now, float dt) {
-        if (now >= nextBurst && now - burstStart > BURST_MS) newBurst(w, h, now);
-        long age = now - burstStart;
-        if (age < BURST_MS) {
+        if (now >= nextBurst && now - burstStart >= burstLength) newBurst(w, h, now);
+        for (int i = 0; i < boltCount; i++) drawBolt(c, bolts[i], now - burstStart - bolts[i].delay, dt);
+    }
+
+    private void drawBolt(Canvas c, Bolt b, long age, float dt) {
+        if (age < 0) return;
+        if (age < FLASH_MS) {
             for (int f = 0; f < FLASH_ON.length; f++) {
-                if (age >= FLASH_ON[f] && age < FLASH_OFF[f]) {
-                    if (flashDrawn != f) {
-                        flashDrawn = f;
-                        breakBolt();
-                    }
-                    // The last flash dies away.
-                    float fade = f == FLASH_ON.length - 1 ? 1f - (age - FLASH_ON[f]) / (float) (FLASH_OFF[f] - FLASH_ON[f]) : 1f;
-                    glow.setAlpha(Math.round(70 * fade));
-                    mid.setAlpha(Math.round(150 * fade));
-                    core.setAlpha(Math.round(220 * fade));
-                    c.drawPath(bolt, glow);
-                    c.drawPath(bolt, mid);
-                    c.drawPath(bolt, core);
+                if (age < FLASH_ON[f] || age >= FLASH_OFF[f]) continue;
+                if (b.flashDrawn != f) {
+                    b.flashDrawn = f;
+                    breakBolt(b);
                 }
+                // The last flash dies away; the forks are fainter than the bolt.
+                float fade = f == FLASH_ON.length - 1 ? 1f - (age - FLASH_ON[f]) / (float) (FLASH_OFF[f] - FLASH_ON[f]) : 1f;
+                drawPath(c, b.main, fade);
+                drawPath(c, b.forks, fade * 0.7f);
             }
         }
-        // Chips fly off the ends and fade over the 450 ms after the burst starts.
-        float chipLife = (age) / (BURST_MS + 450f);
-        if (chipLife < 1f) {
-            chipPaint.setAlpha(Math.round(200 * (1f - chipLife)));
-            float r = 1.6f * density;
-            for (int i = 0; i < CHIPS; i++) {
-                cx[i] += cvx[i] * dt;
-                cy[i] += cvy[i] * dt;
-                cvy[i] += 140 * density * dt;   // a little gravity
-                c.drawCircle(cx[i], cy[i], r, chipPaint);
-            }
+        float life = age / (float) CHIP_MS;
+        if (life >= 1f) return;
+        chipPaint.setAlpha(Math.round(200 * (1f - life)));
+        float r = 1.6f * density;
+        for (int i = 0; i < Bolt.CHIPS; i++) {
+            b.cx[i] += b.cvx[i] * dt;
+            b.cy[i] += b.cvy[i] * dt;
+            b.cvy[i] += 140 * density * dt;   // a little gravity
+            c.drawCircle(b.cx[i], b.cy[i], r, chipPaint);
         }
     }
 
+    private void drawPath(Canvas c, Path p, float fade) {
+        glow.setAlpha(Math.round(70 * fade));
+        mid.setAlpha(Math.round(150 * fade));
+        core.setAlpha(Math.round(220 * fade));
+        c.drawPath(p, glow);
+        c.drawPath(p, mid);
+        c.drawPath(p, core);
+    }
+
+    /** Two or three bolts, at least a third of the screen apart, each a little after the one before. */
     private void newBurst(int w, int h, long now) {
         burstStart = now;
-        flashDrawn = -1;
-        nextBurst = now + 3000 + rnd.nextInt(4000);
-        float len = (120 + rnd.nextFloat() * 180) * density;
-        double angle = rnd.nextDouble() * Math.PI * 2;
-        ax = w * (0.45f + rnd.nextFloat() * 0.45f);
-        ay = h * (0.08f + rnd.nextFloat() * 0.40f);
-        bx = Math.max(w * 0.40f, Math.min(w * 0.97f, ax + (float) Math.cos(angle) * len));
-        by = Math.max(h * 0.05f, Math.min(h * 0.55f, ay + (float) Math.sin(angle) * len));
-        for (int i = 0; i < CHIPS; i++) {
-            boolean fromA = i % 2 == 0;
-            cx[i] = fromA ? ax : bx;
-            cy[i] = fromA ? ay : by;
-            double a = rnd.nextDouble() * Math.PI * 2;
-            float v = (40 + rnd.nextFloat() * 110) * density;
-            cvx[i] = (float) Math.cos(a) * v;
-            cvy[i] = (float) Math.sin(a) * v - 30 * density;
+        nextBurst = now + BURST_EVERY_MS + rnd.nextInt(BURST_SPREAD_MS);
+        boltCount = 2 + rnd.nextInt(2);
+        floor = h * 0.46f;
+        long delay = 0;
+        for (int i = 0; i < boltCount; i++) {
+            Bolt b = bolts[i];
+            float x = 0, y = 0;
+            for (int tries = 0; tries < 40; tries++) {
+                x = w * (0.05f + rnd.nextFloat() * 0.92f);
+                y = h * (0.05f + rnd.nextFloat() * 0.35f);
+                if (!allowed(x, y, w, h)) continue;
+                boolean far = true;
+                for (int j = 0; j < i; j++) {
+                    if (Math.hypot(x - bolts[j].ax, y - bolts[j].ay) < w / 3f) far = false;
+                }
+                if (far) break;
+            }
+            b.ax = x;
+            b.ay = y;
+            float len = (180 + rnd.nextFloat() * 240) * density;
+            double angle = rnd.nextDouble() * Math.PI * 2;
+            b.bx = clamp(x + (float) Math.cos(angle) * len, w * 0.03f, w * 0.97f);
+            b.by = clamp(y + (float) Math.sin(angle) * len, h * 0.04f, floor);
+            if (!allowed(b.bx, b.by, w, h)) {
+                // Pointed into the header: turn it the other way.
+                b.bx = clamp(x - (float) Math.cos(angle) * len, w * 0.03f, w * 0.97f);
+                b.by = clamp(y - (float) Math.sin(angle) * len, h * 0.04f, floor);
+            }
+            b.delay = delay;
+            b.flashDrawn = -1;
+            delay += 60 + rnd.nextInt(90);
+            for (int k = 0; k < Bolt.CHIPS; k++) {
+                boolean fromA = k % 2 == 0;
+                b.cx[k] = fromA ? b.ax : b.bx;
+                b.cy[k] = fromA ? b.ay : b.by;
+                double a = rnd.nextDouble() * Math.PI * 2;
+                float v = (40 + rnd.nextFloat() * 110) * density;
+                b.cvx[k] = (float) Math.cos(a) * v;
+                b.cvy[k] = (float) Math.sin(a) * v - 30 * density;
+            }
+        }
+        burstLength = bolts[boltCount - 1].delay + CHIP_MS;
+    }
+
+    /** Not over the header block (top left, clock and notes). */
+    private static boolean allowed(float x, float y, int w, int h) {
+        return !(x < w * 0.36f && y < h * 0.42f);
+    }
+
+    private static float clamp(float v, float lo, float hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
+    /** Midpoint displacement between the ends, then two or three forks, some with a fork of their own. */
+    private void breakBolt(Bolt b) {
+        b.main.reset();
+        b.main.moveTo(b.ax, b.ay);
+        jag(b.main, b.ax, b.ay, b.bx, b.by, 6);
+        b.forks.reset();
+        float len = (float) Math.hypot(b.bx - b.ax, b.by - b.ay);
+        double dir = Math.atan2(b.by - b.ay, b.bx - b.ax);
+        int n = 2 + rnd.nextInt(2);
+        for (int i = 0; i < n; i++) {
+            float t = 0.15f + rnd.nextFloat() * 0.7f;
+            float fx = b.ax + (b.bx - b.ax) * t, fy = b.ay + (b.by - b.ay) * t;
+            float fl = len * (0.3f + rnd.nextFloat() * 0.25f);
+            double a = dir + (rnd.nextBoolean() ? 1 : -1) * (0.4 + rnd.nextDouble() * 0.5);
+            float ex = fx + (float) Math.cos(a) * fl, ey = Math.min(floor, fy + (float) Math.sin(a) * fl);
+            b.forks.moveTo(fx, fy);
+            jag(b.forks, fx, fy, ex, ey, 4);
+            if (rnd.nextBoolean()) {
+                float sx = fx + (ex - fx) * 0.6f, sy = fy + (ey - fy) * 0.6f;
+                double sa = a + (rnd.nextBoolean() ? 0.6 : -0.6);
+                b.forks.moveTo(sx, sy);
+                jag(b.forks, sx, sy, sx + (float) Math.cos(sa) * fl * 0.45f, Math.min(floor, sy + (float) Math.sin(sa) * fl * 0.45f), 3);
+            }
         }
     }
 
-    /** Midpoint displacement between the two ends, plus a short fork: a new crackle each flash. */
-    private void breakBolt() {
-        bolt.reset();
-        bolt.moveTo(ax, ay);
-        jag(ax, ay, bx, by, 5);
-        // One fork from somewhere along the bolt, shorter and off to the side.
-        float t = 0.3f + rnd.nextFloat() * 0.4f;
-        float fx = ax + (bx - ax) * t, fy = ay + (by - ay) * t;
-        float len = (float) Math.hypot(bx - ax, by - ay) * (0.25f + rnd.nextFloat() * 0.2f);
-        double a = Math.atan2(by - ay, bx - ax) + (rnd.nextBoolean() ? 0.7 : -0.7);
-        bolt.moveTo(fx, fy);
-        jag(fx, fy, fx + (float) Math.cos(a) * len, fy + (float) Math.sin(a) * len, 3);
-    }
-
-    private void jag(float x0, float y0, float x1, float y1, int depth) {
+    private void jag(Path p, float x0, float y0, float x1, float y1, int depth) {
         if (depth == 0) {
-            bolt.lineTo(x1, y1);
+            p.lineTo(x1, y1);
             return;
         }
         float len = (float) Math.hypot(x1 - x0, y1 - y0);
         float off = (rnd.nextFloat() - 0.5f) * len * 0.35f;
         float mx = (x0 + x1) / 2 - (y1 - y0) / Math.max(1f, len) * off;
-        float my = (y0 + y1) / 2 + (x1 - x0) / Math.max(1f, len) * off;
-        jag(x0, y0, mx, my, depth - 1);
-        jag(mx, my, x1, y1, depth - 1);
+        float my = Math.min(floor, (y0 + y1) / 2 + (x1 - x0) / Math.max(1f, len) * off);
+        jag(p, x0, y0, mx, my, depth - 1);
+        jag(p, mx, my, x1, y1, depth - 1);
     }
 }

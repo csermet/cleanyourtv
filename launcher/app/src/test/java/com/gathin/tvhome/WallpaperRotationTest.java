@@ -57,6 +57,15 @@ public class WallpaperRotationTest {
         assertEquals(Config.EFFECT_SPARKS, Config.liveEffectNamed("glitter"));
     }
 
+    @Test public void rotationMovesOnAfterAnHour() {
+        long t = 1_800_000_000_000L;
+        assertTrue(!Config.rotationDue(t, t + Config.ROTATION_HOLD_MS - 1));
+        assertTrue(Config.rotationDue(t, t + Config.ROTATION_HOLD_MS));
+        assertTrue(Config.rotationDue(t, t + 5 * Config.ROTATION_HOLD_MS));
+        // The clock went back (set again from the network): due, so the step never sticks.
+        assertTrue(Config.rotationDue(t, t - 1000));
+    }
+
     @Test public void nothingAtAllIsNull() {
         assertNull(WallpaperRotation.pick(tmp.getRoot(), "wallpaper.jpg", 20000));
         assertNull(WallpaperRotation.pick(null, "wallpaper.jpg", 20000));

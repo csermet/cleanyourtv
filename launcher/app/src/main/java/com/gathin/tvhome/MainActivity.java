@@ -109,6 +109,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private TextView greeting;
     private View btnInputs;
     private TextView btnWifi;
+    /** live_background video controls next to Settings; fullScreen: only the video, at its own brightness. */
+    private TextView btnSound;
+    private View btnFullScreen;
+    private boolean fullScreen;
     private TextView shamsiDate;
     private boolean shamsi;
     /** Optional time-of-day backdrop (config.xml, sky_intensity); 0 keeps it hidden. */
@@ -363,7 +367,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         // live_background video: over the picture (its poster), under the night shade. Not on low-RAM TVs.
         java.io.File video = cfg.liveVideo() && wallView != null && !isLowRam() ? Config.currentVideo(this) : null;
         if (video != null) {
-            liveVideo = new LiveVideo(this, video, cfg.animations && !cfg.reducedMotion);
+            liveVideo = new LiveVideo(this, video, cfg.animations && !cfg.reducedMotion, cfg.liveVideoDim);
             root.addView(liveVideo.view(), root.indexOfChild(wallView) + 1,
                     new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -543,6 +547,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
 
         btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
+        btnSound = findViewById(R.id.btnSound);
+        btnFullScreen = findViewById(R.id.btnFullScreen);
+        if (liveVideo != null) {
+            btnSound.setVisibility(View.VISIBLE);
+            btnFullScreen.setVisibility(View.VISIBLE);
+            btnSound.setOnClickListener(v -> setVideoSound(!liveVideo.sound()));
+            btnFullScreen.setOnClickListener(v -> setFullScreen(true));
+        }
         if (!cfg.networkPill) btnWifi.setVisibility(View.GONE);
         if (cfg.topButtonsSize < 100) {
             // Smaller pills, anchored at the top bar's end so they keep their place in the corner.
@@ -578,8 +590,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
                 focusTile(singleRow ? lastFocused : lastFocused % COLUMNS);
                 return true;
             }
-            int firstButton = btnInputs.getVisibility() == View.VISIBLE ? R.id.btnInputs
-                    : btnWifi.getVisibility() == View.VISIBLE ? R.id.btnWifi : R.id.btnSettings;
+            int firstButton = R.id.btnSettings;
+            for (View b : new View[]{btnInputs, btnWifi, btnSound, btnFullScreen}) {
+                if (b.getVisibility() == View.VISIBLE) {
+                    firstButton = b.getId();
+                    break;
+                }
+            }
             int leftButton = rtlMenuBar ? R.id.btnSettings : firstButton;
             int rightButton = rtlMenuBar ? firstButton : R.id.btnSettings;
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) return v.getId() == leftButton;
@@ -588,8 +605,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
+        btnSound.setOnKeyListener(pillKeys);
+        btnFullScreen.setOnKeyListener(pillKeys);
         if (advancedEffects || singleRow) {
-            for (View button : new View[]{btnInputs, btnWifi, btnSettings}) {
+            for (View button : new View[]{btnInputs, btnWifi, btnSound, btnFullScreen, btnSettings}) {
                 button.setOnFocusChangeListener((view, focused) -> view.animate()
                         .scaleX(focused ? 1.04f : 1f).scaleY(focused ? 1.04f : 1f)
                         .setDuration(160).start());
@@ -707,6 +726,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
+        setFullScreen(false);
         if (openLauncherSettingsIfAsked(intent)) return;
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         grid.scrollToPosition(0);
@@ -724,6 +744,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             stoppedAsleep = false;
             plexLoadedAt = Long.MIN_VALUE / 2;
             statusAt = Long.MIN_VALUE / 2;
+            // Every power-on starts without the video's sound.
+            setVideoSound(false);
+            // Turned on after an hour or more with the same picture and video: the next ones (onResume rebuilds).
+            if (Config.advanceRotation(this)) android.util.Log.i("tvhome-wall", "power-on: next picture and video");
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
@@ -859,6 +883,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         handler.removeCallbacks(statusTick);
         handler.removeCallbacks(retryFailed);
         resumed = false;
+        setFullScreen(false);
         if (liveVideo != null) liveVideo.stop();
         if (liveEffect != null) liveEffect.stop();
         if (diya != null) diya.stop();
@@ -897,6 +922,49 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
             cm.unregisterNetworkCallback(networkCallback);
             cm.unregisterNetworkCallback(vpnCallback);
         }
+    }
+
+    private void setVideoSound(boolean on) {
+        if (liveVideo == null || btnSound == null) return;
+        liveVideo.setSound(on);
+        btnSound.setCompoundDrawablesRelativeWithIntrinsicBounds(on ? R.drawable.ic_volume_up : R.drawable.ic_volume_off, 0, 0, 0);
+        keepScreenOn();
+    }
+
+    /**
+     * Full screen: the video is lifted over everything (the UI, the effects and the night shade stay where
+     * they are, underneath) and its dim layer comes off. Any key but volume brings Home back.
+     */
+    private void setFullScreen(boolean on) {
+        if (liveVideo == null || fullScreen == on) return;
+        fullScreen = on;
+        liveVideo.view().setTranslationZ(on ? 1000f : 0f);
+        liveVideo.setDimmed(!on);
+        if (liveEffect != null) {
+            if (on) liveEffect.stop();
+            else if (resumed) liveEffect.start();
+        }
+        keepScreenOn();
+    }
+
+    /** No screen saver while the video is watched full screen or heard. */
+    private void keepScreenOn() {
+        boolean keep = fullScreen || (liveVideo != null && liveVideo.sound());
+        if (keep) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (fullScreen) {
+            int k = event.getKeyCode();
+            if (k != KeyEvent.KEYCODE_VOLUME_UP && k != KeyEvent.KEYCODE_VOLUME_DOWN && k != KeyEvent.KEYCODE_VOLUME_MUTE) {
+                // On release, so the press that ends full screen does nothing else.
+                if (event.getAction() == KeyEvent.ACTION_UP) setFullScreen(false);
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

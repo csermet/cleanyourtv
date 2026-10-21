@@ -67,9 +67,9 @@
     <string name="wallpaper">Wallpaper</string>
     <string name="wallpaper_state">Wallpaper: %1$s (%2$s)</string>
     <string name="wallpaper_today">picked for today</string>
-    <string name="wallpaper_daily">daily shuffle</string>
+    <string name="wallpaper_daily">shuffle</string>
     <string name="wallpaper_shuffle_now">Shuffle now</string>
-    <string name="wallpaper_hint">Pick a picture for today, or shuffle now. The daily shuffle carries on tomorrow.</string>
+    <string name="wallpaper_hint">Pick a picture for today, or shuffle now. Otherwise the next one comes when the TV is turned on after an hour or more.</string>
     <string name="move_left">Move left</string>
     <string name="move_right">Move right</string>
     <string name="hide_app">Hide</string>
@@ -86,6 +86,11 @@
     <string name="live_picture_effect">Pic + effect</string>
     <string name="live_video_effect">Video + effect</string>
     <string name="live_effect_label">Effect</string>
+    <string name="video_state">Video: %1$s (%2$s)</string>
+    <string name="video_picker_title">Video</string>
+    <string name="video_picker_hint">Move to preview. OK plays it for today; the shuffle carries on tomorrow.</string>
+    <string name="video_sound">Video sound</string>
+    <string name="video_full_screen">Full screen video</string>
     <string name="live_sparks">Sparks</string>
     <string name="live_dust">Dust</string>
     <string name="live_both">Both</string>
@@ -95,7 +100,7 @@
     <string name="section_apps">Apps</string>
     <string name="section_home">Home screen</string>
     <string name="section_system">System</string>
-    <string name="wallpaper_picker_hint">Move to preview. OK sets it for today; the daily shuffle carries on tomorrow.</string>
+    <string name="wallpaper_picker_hint">Move to preview. OK sets it for today; the shuffle carries on tomorrow.</string>
     <string name="plex_hint">Recently added and unwatched picks from your server, in a small row under the apps.</string>
     <string name="plex_connect">Connect Plex</string>
     <string name="plex_connected">Plex: %1$s (connected)</string>

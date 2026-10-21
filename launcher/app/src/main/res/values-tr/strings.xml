@@ -61,9 +61,9 @@
     <string name="wallpaper">Duvar kağıdı</string>
     <string name="wallpaper_state">Duvar kağıdı: %1$s (%2$s)</string>
     <string name="wallpaper_today">bugün için seçildi</string>
-    <string name="wallpaper_daily">günlük karışık</string>
+    <string name="wallpaper_daily">karışık</string>
     <string name="wallpaper_shuffle_now">Şimdi karıştır</string>
-    <string name="wallpaper_hint">Bugün için bir resim seç ya da şimdi karıştır. Günlük karışık sıra yarın devam eder.</string>
+    <string name="wallpaper_hint">Bugün için bir resim seç ya da şimdi karıştır. Seçmezsen TV bir saatten uzun aradan sonra açıldığında sıradaki gelir.</string>
     <string name="move_left">Sola taşı</string>
     <string name="move_right">Sağa taşı</string>
     <string name="hide_app">Gizle</string>
@@ -80,6 +80,11 @@
     <string name="live_picture_effect">Resim + efekt</string>
     <string name="live_video_effect">Video + efekt</string>
     <string name="live_effect_label">Efekt</string>
+    <string name="video_state">Video: %1$s (%2$s)</string>
+    <string name="video_picker_title">Video</string>
+    <string name="video_picker_hint">Önizlemek için gez. OK bugün için oynatır; karışık sıra yarın sürer.</string>
+    <string name="video_sound">Video sesi</string>
+    <string name="video_full_screen">Videoyu tam ekran izle</string>
     <string name="live_sparks">Kıvılcım</string>
     <string name="live_dust">Işık tozu</string>
     <string name="live_both">İkisi</string>
@@ -89,7 +94,7 @@
     <string name="section_apps">Uygulamalar</string>
     <string name="section_home">Ana ekran</string>
     <string name="section_system">Sistem</string>
-    <string name="wallpaper_picker_hint">Önizlemek için gez. OK bugün için seçer; günlük karışık sıra yarın devam eder.</string>
+    <string name="wallpaper_picker_hint">Önizlemek için gez. OK bugün için seçer; karışık sıra yarın sürer.</string>
     <string name="plex_hint">Sunucundan son eklenenler ve izlemediklerin, uygulamaların altında küçük bir satırda.</string>
     <string name="plex_connect">Plex\'i bağla</string>
     <string name="plex_connected">Plex: %1$s (bağlı)</string>

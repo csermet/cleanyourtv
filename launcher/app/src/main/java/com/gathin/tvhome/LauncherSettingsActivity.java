@@ -128,7 +128,7 @@ public final class LauncherSettingsActivity extends Activity {
         first.requestFocus();
     }
 
-    private static final int PICK_WALLPAPER = 41;
+    private static final int PICK_WALLPAPER = 41, PICK_VIDEO = 42;
 
     private void pickWallpaper() {
         startActivityForResult(new android.content.Intent(this, WallpaperPickerActivity.class), PICK_WALLPAPER);
@@ -137,6 +137,10 @@ public final class LauncherSettingsActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == PICK_VIDEO && resultCode == RESULT_OK) {
+            setResult(RESULT_OK);
+            refresh();
+        }
         if (requestCode == PICK_WALLPAPER && resultCode == RESULT_OK) {
             setResult(RESULT_OK);
             loadBackground();
@@ -200,6 +204,8 @@ public final class LauncherSettingsActivity extends Activity {
             });
         }
         ((TextView) findViewById(R.id.liveHint)).setText(hasVideos ? R.string.live_hint : R.string.live_hint_no_video);
+        findViewById(R.id.liveVideoChoice).setOnClickListener(v -> startActivityForResult(
+                new Intent(this, WallpaperPickerActivity.class).putExtra(WallpaperPickerActivity.EXTRA_VIDEOS, true), PICK_VIDEO));
     }
 
     // ---- Plex (plex_row) ------------------------------------------------------------------------
@@ -289,6 +295,17 @@ public final class LauncherSettingsActivity extends Activity {
         findViewById(R.id.liveEffectLabel).setVisibility(effect ? View.VISIBLE : View.GONE);
         findViewById(R.id.liveEffectRow).setVisibility(effect ? View.VISIBLE : View.GONE);
         for (int i = 0; i < effectChoices.length; i++) effectChoices[i].setSelected(liveEffect == i);
+        // Which clip: only with a video background and clips to choose from.
+        boolean video = hasVideos && (liveBackground == Config.LIVE_VIDEO || liveBackground == Config.LIVE_VIDEO_EFFECT);
+        TextView videoChoice = findViewById(R.id.liveVideoChoice);
+        videoChoice.setVisibility(video ? View.VISIBLE : View.GONE);
+        if (video) {
+            File clip = Config.currentVideo(this);
+            boolean picked = choices.getLong(Config.VIDEO_PICK_DAY, Long.MIN_VALUE) == LocalDate.now().toEpochDay()
+                    && clip != null && clip.getName().equals(choices.getString(Config.VIDEO_PICK, null));
+            videoChoice.setText(getString(R.string.video_state, clip == null ? "-" : WallpaperRotation.label(clip),
+                    getString(picked ? R.string.wallpaper_today : R.string.wallpaper_daily)));
+        }
         ((TextView) findViewById(R.id.showHiddenChoice)).setText(getString(R.string.show_hidden, TileOrder.hidden(this).size()));
         if (plex != null) {
             ((TextView) findViewById(R.id.plexChoice)).setText(plex.linked()
