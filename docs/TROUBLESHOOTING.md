@@ -53,6 +53,13 @@ Things that bit us or contributors, so they don't bite you. Commands use `tools/
 - **Chained `pm` commands** (`pm disable a; pm disable b`) may silently stop after the first. Run
   one per shell call; `--batch` does exactly that.
 - **Large pushes hang** through the Python client. Use `tools/b64push.py` for APKs.
+- **A `logcat` without the line you expected is not proof that nothing happened.** On a TCL 55C728
+  (`G05_4K_GB`, Google TV 11) the main buffer is 1 MiB (`persist.logd.size.main`), and the TV's own
+  HDMI, ARC and media logging fills it in well under a minute; around power-on it held about 30
+  seconds. A wake or boot event read a minute later is already gone. Enlarge the buffer for the
+  session with `tools/tv.py 'logcat -G 16M'` (`logcat -g` shows the size; a reboot brings back the
+  firmware's), or keep `logcat` running from before the event. For sound, `dumpsys audio` keeps a
+  history of player events that outlasts the log.
 - **Every way of disabling a package is refused**, not just one. On a Fire TV Box 2015 (`sloane`,
   Fire OS 5 / Android 5.1) `pm disable-user --user 0` returns `SecurityException`,
   `pm uninstall --user 0` returns `DELETE_FAILED_INTERNAL_ERROR`, and `pm hide` reports success
@@ -324,6 +331,10 @@ and do not rewrite the enabled-services list or grant app-ops as a blanket fix. 
 TV 12) the line is `[TclAppBoot] ... calleeComponent = 'com.gathin.tvhome/.HomeKeyService', bootType =
 'bind_service', isAllow = 'false', reason = 'callee_does't_have_OP_AUTO_START_permission.'`, and
 `appops get com.gathin.tvhome` shows `APP_AUTO_START: ignore`. Allowing that one op for the launcher only
-(`appops set com.gathin.tvhome APP_AUTO_START allow`) made the service bind on its own after a restart;
-toggling the service off and on in Accessibility works until the next restart. When reporting, give the
+and saving it (`appops set com.gathin.tvhome APP_AUTO_START allow; appops write-settings`) made the service
+bind on its own after a restart; toggling the service off and on in Accessibility works until the next
+restart. App-ops reach the disk lazily: without `write-settings`, a restart soon after the `set` drops the
+change and the denial is back. Seen on a TCL C89B (Google TV 14, `G08`, `UTT2.250416.001 AU02`), whose log
+reads `[TclAppBoot]:forbid bind service ComponentInfo{com.gathin.tvhome/com.gathin.tvhome.HomeKeyService}`
+and whose `appops get` names the op `AUTO_START`: use the name `appops get` prints. When reporting, give the
 model, build, current user and the relevant redacted lines, not the raw dump.
