@@ -260,6 +260,26 @@ final class PlexClient {
         return pageUrl(it);
     }
 
+    /** One log line for a card (logcat -s tvhome-plex): the keys a Plex link is built from. */
+    String describe(Item it) {
+        StringBuilder b = new StringBuilder("card type=" + it.type + " key=" + it.ratingKey + " showKey=" + it.showKey
+                + " slug=" + it.slug + " season=" + it.season + " guid=" + it.guid
+                + " server=" + prefs.getString(SERVER_ID, ""));
+        if (!it.showKey.isEmpty()) {
+            try {
+                JSONArray seasons = metadata(server("/library/metadata/" + it.showKey + "/children"));
+                for (int i = 0; i < seasons.length(); i++) {
+                    JSONObject x = seasons.getJSONObject(i);
+                    b.append(" s").append(x.optInt("index")).append('=').append(x.optString("ratingKey"))
+                            .append('/').append(x.optString("guid"));
+                }
+            } catch (Exception e) {
+                b.append(" seasons=").append(e.getClass().getSimpleName());
+            }
+        }
+        return b.toString();
+    }
+
     /** The rating key to play for a card, or null. */
     private String playKey(Item it) {
         if ("movie".equals(it.type)) return it.ratingKey.isEmpty() ? null : it.ratingKey;

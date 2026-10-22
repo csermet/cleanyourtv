@@ -2880,6 +2880,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
         TvSounds.launch(this);
         // The season you are in (or the film's page), looked up on the server first: a quick LAN call.
         PLEX_EXEC.execute(() -> {
+            android.util.Log.i("tvhome-plex", plex.describe(item));
             String url = plex.watchUrl(item);
             runOnUiThread(() -> {
                 if (url != null) {
