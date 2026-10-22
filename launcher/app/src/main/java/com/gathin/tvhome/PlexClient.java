@@ -250,12 +250,49 @@ final class PlexClient {
     }
 
     /**
-     * The item's page in the Plex app (watch.plex.tv opens even while Plex is still starting): a film's
+     * What the card opens: the episode to watch, played straight from the server (plex://watch/video): for
+     * a show the server's On Deck episode (where you left off), else its first unwatched episode; a film
+     * itself. Only when no episode is found (or the server is unknown), the page from pageUrl.
+     */
+    String watchUrl(Item it) {
+        String play = playKey(it);
+        if (play != null && !prefs.getString(SERVER_ID, "").isEmpty()) return deepLink(play);
+        return pageUrl(it);
+    }
+
+    /** The rating key to play for a card, or null. */
+    private String playKey(Item it) {
+        if ("movie".equals(it.type)) return it.ratingKey.isEmpty() ? null : it.ratingKey;
+        if (it.showKey.isEmpty()) return null;
+        try {
+            JSONObject mc = new JSONObject(server("/library/metadata/" + it.showKey + "?includeOnDeck=1"))
+                    .optJSONObject("MediaContainer");
+            JSONArray md = mc == null ? null : mc.optJSONArray("Metadata");
+            JSONObject deck = md != null && md.length() > 0 ? md.getJSONObject(0).optJSONObject("OnDeck") : null;
+            JSONArray deckMd = deck == null ? null : deck.optJSONArray("Metadata");
+            if (deckMd != null && deckMd.length() > 0) {
+                String key = deckMd.getJSONObject(0).optString("ratingKey", "");
+                if (!key.isEmpty()) return key;
+            }
+            // allLeaves lists the episodes in order (season, then episode); the first one not watched yet.
+            JSONArray eps = metadata(server("/library/metadata/" + it.showKey + "/allLeaves"));
+            for (int i = 0; i < eps.length(); i++) {
+                JSONObject e = eps.getJSONObject(i);
+                if (e.optInt("viewCount", 0) == 0 && e.optInt("parentIndex", 1) > 0) return e.optString("ratingKey", null);
+            }
+        } catch (Exception ignored) {
+            // the page instead
+        }
+        return null;
+    }
+
+    /**
+     * The item's page in the Plex app, when there is no episode to play (watch.plex.tv opens even while Plex is still starting): a film's
      * page, or for a show the season you are in, from the server's On Deck episode, else the first
      * season with unwatched episodes, else the card's own season. Null when there is no slug, or when
      * watch.plex.tv has no page for it (then the card opens the Plex app itself).
      */
-    String watchUrl(Item it) {
+    String pageUrl(Item it) {
         if (it.slug.isEmpty()) return null;
         if ("movie".equals(it.type)) {
             String film = "https://watch.plex.tv/movie/" + it.slug;
