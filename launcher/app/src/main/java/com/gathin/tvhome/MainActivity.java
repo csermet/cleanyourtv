@@ -256,12 +256,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private static final java.util.concurrent.ExecutorService PLEX_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
     private static final long PLEX_REFRESH_MS = 15 * 60_000L;
     /**
-     * Plex started from cold needs a moment to find the server before it can play an episode link (C728:
-     * 3 s too early, 5 s enough). Opened from a card in the last PLEX_WARM_MS, it is taken as running.
-     */
-    private static final long PLEX_PLAY_DELAY_MS = 6_000L, PLEX_WARM_MS = 20 * 60_000L;
-    private long plexOpenedAt = Long.MIN_VALUE / 2;
-    /**
      * The Plex row or a status line came back empty: on power-on the TV drops Ethernet and gets it back
      * some 5 s later, after Home has already asked. Tried again 3 s after each network change, 10 s after
      * a failure and then every 30 s while Home is shown, six times at most; a success or a network change
@@ -2886,22 +2880,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
                 if (url != null) {
                     Intent page = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             .setPackage(PlexClient.PLEX_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    Intent plexApp = getPackageManager().getLeanbackLaunchIntentForPackage(PlexClient.PLEX_PACKAGE);
-                    long now = android.os.SystemClock.elapsedRealtime();
-                    boolean warm = now - plexOpenedAt < PLEX_WARM_MS;
-                    plexOpenedAt = now;
-                    if (url.startsWith("plex://") && plexApp != null && !warm) {
-                        // An episode to play: a Plex that was not running gets the link before it has found the
-                        // server ("Can't Reach Server"). Start Plex first, then send the episode.
-                        open(plexApp);
-                        handler.postDelayed(() -> {
-                            try {
-                                startActivity(page);
-                            } catch (ActivityNotFoundException | SecurityException ignored) {
-                            }
-                        }, PLEX_PLAY_DELAY_MS);
-                        return;
-                    }
                     try {
                         if (openFromTile && from.isAttachedToWindow() && from.getWidth() > 0) {
                             startActivity(page, android.app.ActivityOptions.makeScaleUpAnimation(

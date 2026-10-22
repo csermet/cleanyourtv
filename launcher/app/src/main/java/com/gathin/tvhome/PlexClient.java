@@ -250,14 +250,52 @@ final class PlexClient {
     }
 
     /**
-     * What the card opens: the episode to watch, played straight from the server (plex://watch/video): for
-     * a show the server's On Deck episode (where you left off), else its first unwatched episode; a film
-     * itself. Only when no episode is found (or the server is unknown), the page from pageUrl.
+     * What the card opens: the item's own page in the Plex app, from the server (the episodes listed there,
+     * you pick one): plex://libraries/<server>/show/<slug>/<showKey>/s/<season>/<seasonKey> with the season
+     * you are in (the server's On Deck episode), else the first season with unwatched episodes, else the
+     * card's season; a film's page. The app finds the item by its key, any slug opens it, and it works
+     * with Plex not yet running. Without a known server, the watch.plex.tv page from pageUrl.
      */
     String watchUrl(Item it) {
-        String play = playKey(it);
-        if (play != null && !prefs.getString(SERVER_ID, "").isEmpty()) return deepLink(play);
-        return pageUrl(it);
+        String server = prefs.getString(SERVER_ID, "");
+        if (server.isEmpty()) return pageUrl(it);
+        String base = "plex://libraries/" + server + "/";
+        String slug = it.slug.isEmpty() ? "x" : it.slug;
+        if ("movie".equals(it.type)) return it.ratingKey.isEmpty() ? pageUrl(it) : base + "movie/" + slug + "/" + it.ratingKey;
+        if (it.showKey.isEmpty()) return pageUrl(it);
+        String show = base + "show/" + slug + "/" + it.showKey;
+        String[] season = librarySeason(it);
+        return season == null ? show : show + "/s/" + season[0] + "/" + season[1];
+    }
+
+    /** {index, ratingKey} of the season the card should open on, or null for the show's page. */
+    private String[] librarySeason(Item it) {
+        try {
+            JSONObject mc = new JSONObject(server("/library/metadata/" + it.showKey + "?includeOnDeck=1"))
+                    .optJSONObject("MediaContainer");
+            JSONArray md = mc == null ? null : mc.optJSONArray("Metadata");
+            JSONObject deck = md != null && md.length() > 0 ? md.getJSONObject(0).optJSONObject("OnDeck") : null;
+            JSONArray deckMd = deck == null ? null : deck.optJSONArray("Metadata");
+            if (deckMd != null && deckMd.length() > 0) {
+                JSONObject e = deckMd.getJSONObject(0);
+                int idx = e.optInt("parentIndex", 0);
+                String key = e.optString("parentRatingKey", "");
+                if (idx > 0 && !key.isEmpty()) return new String[]{String.valueOf(idx), key};
+            }
+            JSONArray seasons = metadata(server("/library/metadata/" + it.showKey + "/children"));
+            String[] own = null;
+            for (int i = 0; i < seasons.length(); i++) {
+                JSONObject x = seasons.getJSONObject(i);
+                int idx = x.optInt("index", 0);
+                String key = x.optString("ratingKey", "");
+                if (idx <= 0 || key.isEmpty()) continue;
+                if (x.optInt("viewedLeafCount", 0) < x.optInt("leafCount", 0)) return new String[]{String.valueOf(idx), key};
+                if (idx == it.season) own = new String[]{String.valueOf(idx), key};
+            }
+            return own;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** One log line for a card (logcat -s tvhome-plex): the keys a Plex link is built from. */
@@ -278,32 +316,6 @@ final class PlexClient {
             }
         }
         return b.toString();
-    }
-
-    /** The rating key to play for a card, or null. */
-    private String playKey(Item it) {
-        if ("movie".equals(it.type)) return it.ratingKey.isEmpty() ? null : it.ratingKey;
-        if (it.showKey.isEmpty()) return null;
-        try {
-            JSONObject mc = new JSONObject(server("/library/metadata/" + it.showKey + "?includeOnDeck=1"))
-                    .optJSONObject("MediaContainer");
-            JSONArray md = mc == null ? null : mc.optJSONArray("Metadata");
-            JSONObject deck = md != null && md.length() > 0 ? md.getJSONObject(0).optJSONObject("OnDeck") : null;
-            JSONArray deckMd = deck == null ? null : deck.optJSONArray("Metadata");
-            if (deckMd != null && deckMd.length() > 0) {
-                String key = deckMd.getJSONObject(0).optString("ratingKey", "");
-                if (!key.isEmpty()) return key;
-            }
-            // allLeaves lists the episodes in order (season, then episode); the first one not watched yet.
-            JSONArray eps = metadata(server("/library/metadata/" + it.showKey + "/allLeaves"));
-            for (int i = 0; i < eps.length(); i++) {
-                JSONObject e = eps.getJSONObject(i);
-                if (e.optInt("viewCount", 0) == 0 && e.optInt("parentIndex", 1) > 0) return e.optString("ratingKey", null);
-            }
-        } catch (Exception ignored) {
-            // the page instead
-        }
-        return null;
     }
 
     /**
