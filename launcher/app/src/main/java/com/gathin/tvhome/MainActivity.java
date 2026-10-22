@@ -255,8 +255,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
     private int plexLast;
     private static final java.util.concurrent.ExecutorService PLEX_EXEC = java.util.concurrent.Executors.newSingleThreadExecutor();
     private static final long PLEX_REFRESH_MS = 15 * 60_000L;
-    /** Plex started from cold needs a moment to find the server before it can play an episode link. */
-    private static final long PLEX_PLAY_DELAY_MS = 3_000L;
+    /**
+     * Plex started from cold needs a moment to find the server before it can play an episode link (C728:
+     * 3 s too early, 5 s enough). Opened from a card in the last PLEX_WARM_MS, it is taken as running.
+     */
+    private static final long PLEX_PLAY_DELAY_MS = 6_000L, PLEX_WARM_MS = 20 * 60_000L;
+    private long plexOpenedAt = Long.MIN_VALUE / 2;
     /**
      * The Plex row or a status line came back empty: on power-on the TV drops Ethernet and gets it back
      * some 5 s later, after Home has already asked. Tried again 3 s after each network change, 10 s after
@@ -2882,7 +2886,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener, P
                     Intent page = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             .setPackage(PlexClient.PLEX_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     Intent plexApp = getPackageManager().getLeanbackLaunchIntentForPackage(PlexClient.PLEX_PACKAGE);
-                    if (url.startsWith("plex://") && plexApp != null) {
+                    long now = android.os.SystemClock.elapsedRealtime();
+                    boolean warm = now - plexOpenedAt < PLEX_WARM_MS;
+                    plexOpenedAt = now;
+                    if (url.startsWith("plex://") && plexApp != null && !warm) {
                         // An episode to play: a Plex that was not running gets the link before it has found the
                         // server ("Can't Reach Server"). Start Plex first, then send the episode.
                         open(plexApp);
